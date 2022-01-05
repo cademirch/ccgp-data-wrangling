@@ -26,9 +26,9 @@ if sample_names:
         found_files = [file for file in fastq_files if name in file.name]
         if found_files:
             found_files = [str(file.name) for file in found_files]
-            for file in found_files:
+            for i, file in enumerate(found_files):
                 operations.append(
-                    pymongo.operations.UpdateOne({'*sample_name': sample['*sample_name']}, {'$addToSet': {'fastq_files': file}})
+                    pymongo.operations.UpdateOne({'*sample_name': sample['*sample_name']}, {'$set': {f'filename{i}': file}})
                 )
                 print(f"Added {file} to {sample['*sample_name']}")
 
