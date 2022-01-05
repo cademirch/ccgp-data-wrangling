@@ -1,3 +1,6 @@
+"""
+Takes one argument, a directory containing fastq files to be added to DB.
+"""
 import pymongo
 import pandas as pd
 import parse
@@ -17,16 +20,16 @@ fastq_files = list(directory.glob('*.fastq.gz'))
 
 operations = []
 
-
 if sample_names:
     for sample in sample_names:
         name = sample['*sample_name']
         found_files = [file for file in fastq_files if name in file.name]
         if found_files:
             found_files = [str(file.name) for file in found_files]
-            operations.append(
-                pymongo.operations.UpdateOne({'*sample_name': sample['*sample_name']}, {'$addToSet': {'fastq_files': found_files}})
-            )
+            for file in found_files:
+                operations.append(
+                    pymongo.operations.UpdateOne({'*sample_name': sample['*sample_name']}, {'$addToSet': {'fastq_files': file}})
+                )
 
 
 try:

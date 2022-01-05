@@ -10,8 +10,7 @@ df = parse.get_big_df()
 db = client['ccgp']
 collection = db['ccgp-samples']
 
-# data = df.to_dict('records')
-# collection.update_many(data, ordered=False)
+
 operations = []
 for _, row in df.iterrows():
     record = row.to_dict()
