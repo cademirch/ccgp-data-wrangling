@@ -30,6 +30,7 @@ if sample_names:
                 operations.append(
                     pymongo.operations.UpdateOne({'*sample_name': sample['*sample_name']}, {'$addToSet': {'fastq_files': file}})
                 )
+                print(f"Added {file} to {sample['*sample_name']}")
 
 
 try:
