@@ -1,4 +1,4 @@
-"""This script updates the metadata spreadsheet with the latest data from the sheets in the local directory (see parse.py)."""
+"""This script updates the google drive metadata spreadsheet with the latest data from the sheets in the local directory (see parse.py)."""
 from parse import *
 import httplib2
 import os
