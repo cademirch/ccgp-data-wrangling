@@ -1,6 +1,8 @@
 import pygsheets
 import numpy as np
 import pandas as pd
+import parse
+from db import get_mongo_client
 
 """Classes and functions for interacting with Google Sheets."""
 
@@ -54,6 +56,15 @@ def update_wgs_gsheet(db_client) -> None:
 
     ### summarize
     wks = sh.worksheet_by_title("summary")
-    summ = get_summary_df(df)
+    summ = parse.get_summary_df(df)
 
     wks.set_dataframe(summ, (1, 1))
+
+
+def main():
+    db = get_mongo_client()
+    update_wgs_gsheet(db)
+
+
+if __name__ == "__main__":
+    main()

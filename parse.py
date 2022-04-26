@@ -3,6 +3,14 @@ import pandas as pd
 from pathlib import Path
 from collections import defaultdict
 from gsheets import WGSTracking
+import sys
+from glob import glob
+
+
+def get_already_read() -> set:
+    with open("parsed_submissions.txt", "r") as f:
+        already_read = set([line.rstrip() for line in f.readlines()])
+    return already_read
 
 
 def get_project_id(series: pd.Series) -> dict[str:str]:
@@ -53,7 +61,19 @@ def find_header_line_num(file: Path) -> int:
 def read_minicore_sheets() -> pd.DataFrame:
     df_list = []
     w = WGSTracking()
-    for file in Path("../metadata_submissions/minicore").glob("*"):
+    already_read = get_already_read()
+
+    files = set(
+        glob("../metadata_submissions/minicore/*.xlsx")
+        + glob("../metadata_submissions/minicore/*.xls")
+    )
+    files = files - already_read
+    if len(files) == 0:
+        print("No minicore files to process")
+        return None
+    files = files - already_read
+    for file in files:
+        print(f"Processing file: {file}")
         if file.suffix in [".xlsx", ".xls"]:
             df = pd.read_excel(file)
             df.drop(
@@ -70,7 +90,8 @@ def read_minicore_sheets() -> pd.DataFrame:
                 df["ccgp-project-id"].unique().tolist()[0]
             )
             df_list.append(df)
-            # file.rename(f"../metada_submissions/minicore/parsed/{file.name}")
+            with open("parsed_submissions.txt", "a") as f:
+                print(file, file=f)
     out_df = pd.concat(df_list)
     rename_dict = {
         "SampleID*": "*sample_name",
@@ -114,7 +135,19 @@ def read_minicore_sheets() -> pd.DataFrame:
 def read_biosample_sheets() -> pd.DataFrame:
     df_list = []
     w = WGSTracking()
-    for file in Path("../metadata_submissions/not_minicore").glob("*"):
+    already_read = get_already_read()
+    files = set(
+        glob("../metadata_submissions/not_minicore/*.xlsx")
+        + glob("../metadata_submissions/not_minicore/*.xls")
+        + glob("../metadata_submissions/not_minicore/*.tsv")
+    )
+    files = files - already_read
+    if len(files) == 0:
+        print("No not-minicore files to process")
+        return None
+
+    for file in files:
+        print(f"Processing file: {file}")
         if file.suffix in [".xlsx", ".xls"]:
             df = pd.read_excel(file, header=12)
 
@@ -133,12 +166,23 @@ def read_biosample_sheets() -> pd.DataFrame:
             df["ccgp-project-id"].unique().tolist()[0]
         )
         df_list.append(df)
-        # file.rename(f"../metada_submissions/not_minicore/parsed/{file.name}")
+        with open("parsed_submissions.txt", "a") as f:
+            print(file, file=f)
     out_df = pd.concat(df_list)
     return out_df
 
 
 def get_big_df() -> pd.DataFrame:
+    minicore_sheets = read_minicore_sheets()
+    biosample_sheets = read_biosample_sheets()
+
+    if minicore_sheets is None and biosample_sheets is None:
+        print("Nothing to do.")
+        sys.exit()
+    elif minicore_sheets is not None:
+        df = minicore_sheets
+    elif biosample_sheets is not None:
+        df = biosample_sheets
     df = pd.concat([read_minicore_sheets(), read_biosample_sheets()])
     df = df.loc[:, ~df.columns.duplicated()]
     df = df.loc[:, ~df.columns.str.contains("^Unnamed", na=False)]
@@ -152,7 +196,7 @@ def get_big_df() -> pd.DataFrame:
 
 
 def get_summary_df(df) -> pd.DataFrame:
-    WGSTracking = WGSTracking()
+    wgs_sheet = WGSTracking()
 
     subset = df[
         [
@@ -169,8 +213,8 @@ def get_summary_df(df) -> pd.DataFrame:
     has_reads = grouped["files"].count()
     expected_species = grouped["expected-species"].sum()
     filesize_sum = grouped["filesize_sum"].sum() / 1e12
-    reference_prog = WGSTracking.reference_progress()
-    expected_count = WGSTracking.expected_count()
+    reference_prog = wgs_sheet.reference_progress()
+    expected_count = wgs_sheet.expected_count()
     percent_seq = has_reads / expected_count
 
     df = pd.concat(
