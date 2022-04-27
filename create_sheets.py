@@ -172,21 +172,27 @@ def create_sra_sheet(
 def main():
     db = get_mongo_client()
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "-p",
+        dest="project_id",
+        required=True,
+        help="Project id to generate sheets for.",
+    )
     subparser = parser.add_subparsers(
         dest="command", title="subcommands", description="valid subcommands"
     )
-    metadata = subparser.add_parser("workflow", description="Update metadata")
-    attributes = subparser.add_parser("sra", description="Update biosample accessions")
-    both = subparser.add_parser("both", description="Update both")
+    metadata = subparser.add_parser("workflow", description="Create workflow sheet")
+    attributes = subparser.add_parser("sra", description="Create SRA submission sheet")
+    both = subparser.add_parser("both", description="Create both")
     args = parser.parse_args()
 
     if args.command == "workflow":
-        create_workflow_sheet(db)
+        create_workflow_sheet(args.project_id, db)
     elif args.command == "sra":
-        create_sra_sheet(db)
+        create_sra_sheet(args.project_id, db)
     elif args.command == "both":
-        create_workflow_sheet()(db)
-        create_sra_sheet()(db)
+        create_workflow_sheet(args.project_id, db)
+        create_sra_sheet(args.project_id, db)
 
 
 if __name__ == "__main__":
