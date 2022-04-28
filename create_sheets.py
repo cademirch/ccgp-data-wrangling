@@ -119,7 +119,7 @@ def create_workflow_sheet(
     workflow_df.to_csv(filepath, index=False)
     ccgp_workflow_progress.update_one(
         filter={"project_id": project_id},
-        update={"$set": {"workflow_sheet_created": datetime.datetime.utcnow()}},
+        update={"$set": {"workflow_sheet_created": datetime.utcnow()}},
         upsert=True,
     )
 
@@ -164,7 +164,7 @@ def create_sra_sheet(
     sra_df.to_csv(filepath, index=False, sep="\t")
     ccgp_workflow_progress.update_one(
         filter={"project_id": project_id},
-        update={"$set": {"sra_sheet_created": datetime.datetime.utcnow()}},
+        update={"$set": {"sra_sheet_created": datetime.utcnow()}},
         upsert=True,
     )
 
