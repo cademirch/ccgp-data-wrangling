@@ -1,10 +1,11 @@
 """This module handles parsing of the minicore sheets and biosample metadata sheets that are submitted to the me."""
+import warnings
+
+warnings.simplefilter(action="ignore", category=FutureWarning)
 import pandas as pd
 from pathlib import Path
 from collections import defaultdict
 from gsheets import WGSTracking
-import sys
-from glob import glob
 
 
 def get_already_read() -> set:
@@ -58,20 +59,9 @@ def find_header_line_num(file: Path) -> int:
 
 
 # Read all minicore sheets
-def read_minicore_sheets() -> pd.DataFrame:
+def read_minicore_sheets(files: list[Path]) -> pd.DataFrame:
     df_list = []
     w = WGSTracking()
-    already_read = get_already_read()
-
-    files = set(
-        glob("../metadata_submissions/minicore/*.xlsx")
-        + glob("../metadata_submissions/minicore/*.xls")
-    )
-    files = files - already_read
-    if len(files) == 0:
-        print("No minicore files to process")
-        return None
-    files = files - already_read
     for file in files:
         print(f"Processing file: {file}")
         if file.suffix in [".xlsx", ".xls"]:
@@ -132,20 +122,10 @@ def read_minicore_sheets() -> pd.DataFrame:
     return out_df
 
 
-def read_biosample_sheets() -> pd.DataFrame:
+def read_non_minicore(files: list[Path]) -> pd.DataFrame:
     df_list = []
     w = WGSTracking()
-    already_read = get_already_read()
-    files = set(
-        glob("../metadata_submissions/not_minicore/*.xlsx")
-        + glob("../metadata_submissions/not_minicore/*.xls")
-        + glob("../metadata_submissions/not_minicore/*.tsv")
-    )
-    files = files - already_read
-    if len(files) == 0:
-        print("No not-minicore files to process")
-        return None
-
+    files = [Path(file) for file in files]
     for file in files:
         print(f"Processing file: {file}")
         if file.suffix in [".xlsx", ".xls"]:
@@ -172,18 +152,21 @@ def read_biosample_sheets() -> pd.DataFrame:
     return out_df
 
 
-def get_big_df() -> pd.DataFrame:
-    minicore_sheets = read_minicore_sheets()
-    biosample_sheets = read_biosample_sheets()
+def get_big_df(minicore_files, non_minicore_files) -> pd.DataFrame:
+    minicore_files = [Path(item["name"]) for item in minicore_files]
+    non_minicore_files = [Path(item["name"]) for item in non_minicore_files]
+    if minicore_files and non_minicore_files:
+        df = pd.concat(
+            [
+                read_minicore_sheets(minicore_files),
+                read_non_minicore(non_minicore_files),
+            ]
+        )
+    elif minicore_files and not non_minicore_files:
+        df = read_minicore_sheets(minicore_files)
+    elif not minicore_files and non_minicore_files:
+        df = read_non_minicore(non_minicore_files)
 
-    if minicore_sheets is None and biosample_sheets is None:
-        print("Nothing to do.")
-        sys.exit()
-    elif minicore_sheets is not None:
-        df = minicore_sheets
-    elif biosample_sheets is not None:
-        df = biosample_sheets
-    df = pd.concat([read_minicore_sheets(), read_biosample_sheets()])
     df = df.loc[:, ~df.columns.duplicated()]
     df = df.loc[:, ~df.columns.str.contains("^Unnamed", na=False)]
     df["*sample_name"] = df["*sample_name"].astype(str)
