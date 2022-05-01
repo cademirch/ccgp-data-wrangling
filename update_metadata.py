@@ -56,13 +56,7 @@ def update_metadata(db_client: pymongo.MongoClient):
         collection.bulk_write(operations)
     except BulkWriteError as bwe:
         pprint(bwe.details)
-    print(project_ids)
-    for p_id, counts in project_ids.items():
-        ccgp_workflow_progress.update_one(
-            filter={"project_id": p_id},
-            update={"$addToSet": {"Metadata Recieved": (datetime.utcnow(), counts)}},
-            upsert=True,
-        )
+
     for file in files_to_download:
         name = file["name"]
         parsed_metadatas.update_one(
