@@ -22,7 +22,7 @@ def list_s3_bucket_objs():
 
 
 def update_db_all(db_client: pymongo.MongoClient, files):
-    """Updates reads db with new (not seen before) reads"""
+    """Updates db with list of files."""
     db = db_client["ccgp"]
     collection = db["reads"]
 

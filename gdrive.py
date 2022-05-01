@@ -25,7 +25,7 @@ class CCGPDrive:
                 .list(
                     q=query,
                     spaces="drive",
-                    fields="nextPageToken, files(id, name)",
+                    fields="nextPageToken, files(id, name, modifiedTime)",
                     pageToken=page_token,
                 )
                 .execute()
