@@ -91,6 +91,9 @@ def link_files_to_metadata(db_client: pymongo.MongoClient):
                         filter={"file_name": file}, update={"$set": {"orphan": False}}
                     )
                 )
+    if not matched_files:
+        print("Found no matches, exiting.")
+        return
     print(f"Matched {matched_files} orphan files with {matches} samples")
     try:
         metadata.bulk_write(metadata_ops)
