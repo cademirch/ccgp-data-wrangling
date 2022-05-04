@@ -1,2 +1,2 @@
 # ccgp-data-wrangling
-![New Flowchart (1)](https://user-images.githubusercontent.com/44762354/166740520-a255583a-2175-4284-baf4-fb363501dfd2.png)
+<img width="309" alt="Screen Shot 2022-05-04 at 10 05 25 AM" src="https://user-images.githubusercontent.com/44762354/166741296-c76b30ca-e1f0-4de0-bbe1-db060a5e9dab.png">
