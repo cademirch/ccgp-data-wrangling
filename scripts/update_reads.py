@@ -23,7 +23,7 @@ def list_s3_bucket_objs():
 
 def update_db_all(db_client: pymongo.MongoClient, files):
     """Updates db with list of files."""
-    db = db_client["ccgp"]
+    db = db_client["ccgp_dev"]
     collection = db["reads"]
 
     operations = []
@@ -32,7 +32,7 @@ def update_db_all(db_client: pymongo.MongoClient, files):
             pymongo.operations.UpdateOne(  # type: ignore
                 filter={"file_name": file.key},
                 update={
-                    "$set": {
+                    "$setOnInsert": {
                         "orphan": True,
                         "filesize": file.size,
                         "mdate": file.last_modified,
@@ -49,25 +49,30 @@ def update_db_all(db_client: pymongo.MongoClient, files):
 
 def link_files_to_metadata(db_client: pymongo.MongoClient):
     """Links fastq files to sample names in samples db."""
-    db = db_client["ccgp"]
-    metadata = db["ccgp-samples"]
+    db = db_client["ccgp_dev"]
+    metadata = db["sample_metadata"]
     reads = db["reads"]
     sample_names = list(
         metadata.find({}, {"*sample_name": 1})
     )  # Get all samples regardless if it has files b/c they might want new files
     orphan_reads = list(reads.find({"orphan": True}))
+    print(f"Found {len(orphan_reads)} orphan reads.")
     metadata_ops = []
     reads_ops = []
+    matches = 0
+    matched_files = 0
     for sample in sample_names:
         name = sample["*sample_name"]
         found_files = [item for item in orphan_reads if f"{name}_" in item["file_name"]]
         if found_files:
+            matches += 1
+            matched_files += len(found_files)
             date_recieved = found_files[0][
                 "mdate"
             ]  #  Take mdate of first file for simplicity's sake
             filesize_sum = sum([file["filesize"] for file in found_files])
             files = [file["file_name"] for file in found_files]
-            # print(name, files, date_recieved, filesize_sum)
+            print(f"Matched {sample} with {files}.")
             metadata_ops.append(
                 pymongo.operations.UpdateOne(
                     filter={"*sample_name": name},
@@ -86,6 +91,7 @@ def link_files_to_metadata(db_client: pymongo.MongoClient):
                         filter={"file_name": file}, update={"$set": {"orphan": False}}
                     )
                 )
+    print(f"Matched {matched_files} orphan files with {matches} samples")
     try:
         metadata.bulk_write(metadata_ops)
         reads.bulk_write(reads_ops)

@@ -1,6 +1,7 @@
-google_secret.json
+scripts/google_secret.json
 *.gz
 *.pyc
-.env
+scripts/.env
 test_reads/*
 .snakemake/
+logs/*

@@ -59,7 +59,7 @@ class CCGPDrive:
         found = self._get_files_list_response(query)
         return found
 
-    def download_files(self, files: list[dict]) -> None:
+    def download_files(self, *files: dict) -> None:
         for file in files:
             if Path(file["name"]).exists():
                 print(
@@ -74,6 +74,6 @@ class CCGPDrive:
             fh = io.FileIO(file.get("name"), "wb")
             downloader = MediaIoBaseDownload(fh, request)
             done = False
-            print("Downloading file " + file["name"])
+            print("Downloading file " + "'" + file["name"] + "'")
             while done is False:
                 status, done = downloader.next_chunk()

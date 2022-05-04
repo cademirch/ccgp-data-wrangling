@@ -58,31 +58,23 @@ def find_header_line_num(file: Path) -> int:
     raise (ValueError(f"Could not find header in {file}"))
 
 
-# Read all minicore sheets
-def read_minicore_sheets(files: list[Path]) -> pd.DataFrame:
-    df_list = []
+def read_minicore_sheet(file: Path) -> pd.DataFrame:
     w = WGSTracking()
-    for file in files:
-        print(f"Processing file: {file}")
-        if file.suffix in [".xlsx", ".xls"]:
-            df = pd.read_excel(file)
-            df.drop(
-                index=df.index[[0, 1]], axis=0, inplace=True
-            )  # Drop the first two rows (info and example)
-            df.drop(
-                df.columns[[0]], axis=1, inplace=True
-            )  # Drop the first column (sample number)
-            df.dropna(how="all", inplace=True)
-            df["ccgp-project-id"], df["expected-species"] = get_project_id(
-                df["Genus species*"]
-            )
-            df["ref_genome_accession"] = w.reference_accession(
-                df["ccgp-project-id"].unique().tolist()[0]
-            )
-            df_list.append(df)
-            with open("parsed_submissions.txt", "a") as f:
-                print(file, file=f)
-    out_df = pd.concat(df_list)
+
+    df = pd.read_excel(file)
+    df.drop(
+        index=df.index[[0, 1]], axis=0, inplace=True
+    )  # Drop the first two rows (info and example)
+    df.drop(
+        df.columns[[0]], axis=1, inplace=True
+    )  # Drop the first column (sample number)
+    df.dropna(how="all", inplace=True)
+    df["ccgp-project-id"], df["expected-species"] = get_project_id(df["Genus species*"])
+    df["ref_genome_accession"] = w.reference_accession(
+        df["ccgp-project-id"].unique().tolist()[0]
+    )
+    df["metadata_file"] = str(file)
+
     rename_dict = {
         "SampleID*": "*sample_name",
         "Genus species*": "*organism",
@@ -91,7 +83,7 @@ def read_minicore_sheets(files: list[Path]) -> pd.DataFrame:
         "sample collection date*": "*collection_date",
         "Locality Name": "geo_loc_name",
     }
-    out_df.rename(columns=rename_dict, inplace=True)
+    df.rename(columns=rename_dict, inplace=True)
     cols_to_keep = [
         "*sample_name",
         "*organism",
@@ -107,10 +99,11 @@ def read_minicore_sheets(files: list[Path]) -> pd.DataFrame:
         "ccgp-project-id",
         "expected-species",
         "ref_genome_accession",
+        "metadata_file",
     ]
-    out_df.drop(columns=out_df.columns.difference(cols_to_keep), inplace=True)
+    df.drop(columns=df.columns.difference(cols_to_keep), inplace=True)
 
-    out_df[
+    df[
         "library_prep_method"
     ] = """Automated DNA extractions from tissues were performed using a bead-based and taxa-specific series of kits from Macherey-Nagel or Omega Bio-tek on an epMotion 5075 liquid handling robot. 
     Following extraction, DNA was assayed for purity, quality, and quantity using a NanoDrop 1000, agarose gel, and Qubit fluorescence quantification, respectively. 
@@ -119,53 +112,34 @@ def read_minicore_sheets(files: list[Path]) -> pd.DataFrame:
     Individuals were then pooled into a single library in sets of 24 and ligated with one pool-specific i5 index. 
     Individuals are therefore dual indexed using 8bp indexes. Libraries were then amplified for 6 PCR cycles using the Kapa HiFi HotStart ReadyMix and then size-selected using SeqWell MAGwise Paramagnetic Beads. 
     Libraries were pooled equimolarly according to concentration and average fragment size for sequencing on a NovaSeq S4 6000 with paired-end 150 base pair reads at QB3 Genomics Vincent J. Coates Genomics Sequencing Lab."""
-    return out_df
+    return df
 
 
-def read_non_minicore(files: list[Path]) -> pd.DataFrame:
-    df_list = []
+def read_non_minicore(file: Path) -> pd.DataFrame:
+
     w = WGSTracking()
-    files = [Path(file) for file in files]
-    for file in files:
-        print(f"Processing file: {file}")
-        if file.suffix in [".xlsx", ".xls"]:
-            df = pd.read_excel(file, header=12)
+    if file.suffix in [".xlsx", ".xls"]:
+        df = pd.read_excel(file, header=12)
 
-        elif file.suffix in [".tsv"]:
-            df = pd.read_csv(
-                file,
-                header=find_header_line_num(file),
-                sep="\t",
-                encoding_errors="ignore",
-            )
-        else:
-            continue
-        df.dropna(how="all", inplace=True)
-        df["ccgp-project-id"], df["expected-species"] = get_project_id(df["*organism"])
-        df["ref_genome_accession"] = w.reference_accession(
-            df["ccgp-project-id"].unique().tolist()[0]
+    elif file.suffix in [".tsv"]:
+        df = pd.read_csv(
+            file,
+            header=find_header_line_num(file),
+            sep="\t",
+            encoding_errors="ignore",
         )
-        df_list.append(df)
-        with open("parsed_submissions.txt", "a") as f:
-            print(file, file=f)
-    out_df = pd.concat(df_list)
-    return out_df
+
+    df.dropna(how="all", inplace=True)
+    df["ccgp-project-id"], df["expected-species"] = get_project_id(df["*organism"])
+    df["ref_genome_accession"] = w.reference_accession(
+        df["ccgp-project-id"].unique().tolist()[0]
+    )
+    df["metadata_file"] = str(file)
+    return df
 
 
-def get_big_df(minicore_files, non_minicore_files) -> pd.DataFrame:
-    minicore_files = [Path(item["name"]) for item in minicore_files]
-    non_minicore_files = [Path(item["name"]) for item in non_minicore_files]
-    if minicore_files and non_minicore_files:
-        df = pd.concat(
-            [
-                read_minicore_sheets(minicore_files),
-                read_non_minicore(non_minicore_files),
-            ]
-        )
-    elif minicore_files and not non_minicore_files:
-        df = read_minicore_sheets(minicore_files)
-    elif not minicore_files and non_minicore_files:
-        df = read_non_minicore(non_minicore_files)
+def finalize_df(df: pd.DataFrame) -> pd.DataFrame:
+    """Finalizes dataframe to be added to database."""
 
     df = df.loc[:, ~df.columns.duplicated()]
     df = df.loc[:, ~df.columns.str.contains("^Unnamed", na=False)]
@@ -194,12 +168,12 @@ def get_summary_df(df) -> pd.DataFrame:
     grouped = subset.groupby("ccgp-project-id")
     total_counts = grouped.size()
     has_reads = grouped["files"].count()
-    expected_species = grouped["expected-species"].sum()
+    expected_species = total_counts - (grouped["expected-species"].sum() / 1)
     filesize_sum = grouped["filesize_sum"].sum() / 1e12
     reference_prog = wgs_sheet.reference_progress()
     expected_count = wgs_sheet.expected_count()
     percent_seq = has_reads / expected_count
-
+    print(expected_species)
     df = pd.concat(
         {
             "Metadata recieved": total_counts,
@@ -214,4 +188,5 @@ def get_summary_df(df) -> pd.DataFrame:
     )
     df.reset_index(inplace=True)
     df.sort_values(by=["% Done"], inplace=True, ascending=False)
+
     return df

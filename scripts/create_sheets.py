@@ -60,9 +60,9 @@ def create_workflow_sheet(
     db_client: pymongo.MongoClient,
 ) -> None:
     """Creates workflow csv for given project_id. If project does not have ref genome accession, a placeholder will be printed."""
-    db = db_client["ccgp"]
-    ccgp_samples = db["ccgp-samples"]
-    ccgp_workflow_progress = db["ccgp_workflow_progress"]
+    db = db_client["ccgp_dev"]
+    ccgp_samples = db["sample_metadata"]
+    ccgp_workflow_progress = db["workflow_progress"]
     df = preprocess_dataframe(
         pd.DataFrame(list(ccgp_samples.find({"ccgp-project-id": project_id})))
     )
@@ -128,9 +128,9 @@ def create_sra_sheet(
     project_id: str,
     db_client: pymongo.MongoClient,
 ) -> None:
-    db = db_client["ccgp"]
-    ccgp_samples = db["ccgp-samples"]
-    ccgp_workflow_progress = db["ccgp_workflow_progress"]
+    db = db_client["ccgp_dev"]
+    ccgp_samples = db["sample_metadata"]
+    ccgp_workflow_progress = db["workflow_progress"]
     sra_df = preprocess_dataframe(
         pd.DataFrame(list(ccgp_samples.find({"ccgp-project-id": project_id})))
     )
