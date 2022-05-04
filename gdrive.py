@@ -4,6 +4,7 @@ import google.auth
 import io
 from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
 from pathlib import Path
+from dotenv import load_dotenv
 
 SCOPES = ["https://www.googleapis.com/auth/drive"]
 
@@ -13,6 +14,7 @@ class CCGPDrive:
 
     def __init__(self) -> None:
         """Gets credentials and builds google drive service."""
+        load_dotenv()
         self.creds, _ = google.auth.default(scopes=SCOPES)
         self.service = build("drive", "v3", credentials=self.creds)
 

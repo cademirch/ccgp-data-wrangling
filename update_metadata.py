@@ -14,16 +14,20 @@ from collections import defaultdict
 import traceback
 
 
-def update_metadata(db_client: pymongo.MongoClient):
+def update_metadata(db_client: pymongo.MongoClient, force=False):
     """Parses metadata sheets from minicore and non minicore sources and updates database."""
     db = db_client["ccgp_dev"]
     collection = db["sample_metadata"]
     parsed_metadatas = db["parsed_metadata_files"]
     ccgp_workflow_progress = db["workflow_progress"]
-    already_read = [
-        doc.get("file_name")
-        for doc in parsed_metadatas.find({"error": {"$exists": False}})
-    ]
+
+    if force:
+        already_read = []
+    else:
+        already_read = [
+            doc.get("file_name")
+            for doc in parsed_metadatas.find({"error": {"$exists": False}})
+        ]
 
     drive = CCGPDrive()
 
@@ -214,22 +218,38 @@ def add_biosample_accessions(
 def main():
     db = get_mongo_client()
     parser = argparse.ArgumentParser()
+
     subparser = parser.add_subparsers(
         dest="command", title="subcommands", description="valid subcommands"
     )
     metadata = subparser.add_parser("metadata", description="Update metadata")
+    metadata.add_argument(
+        "-f",
+        dest="force",
+        required=False,
+        action="store_true",
+        help="Project id to generate sheets for.",
+    )
     attributes = subparser.add_parser(
         "attributes", description="Update biosample accessions"
     )
     both = subparser.add_parser("both", description="Update both")
+
     args = parser.parse_args()
 
+    if args.force:
+        force = True
+
+    else:
+        force = False
+
     if args.command == "metadata":
-        update_metadata(db)
+
+        update_metadata(db, force)
     elif args.command == "attributes":
         add_biosample_accessions(db)
     elif args.command == "both":
-        update_metadata(db)
+        update_metadata(db, force)
         add_biosample_accessions(db)
 
 

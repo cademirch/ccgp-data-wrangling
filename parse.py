@@ -74,7 +74,7 @@ def read_minicore_sheet(file: Path) -> pd.DataFrame:
         df["ccgp-project-id"].unique().tolist()[0]
     )
     df["metadata_file"] = str(file)
-
+    df["project_type"] = "Minicore"
     rename_dict = {
         "SampleID*": "*sample_name",
         "Genus species*": "*organism",
@@ -100,6 +100,7 @@ def read_minicore_sheet(file: Path) -> pd.DataFrame:
         "expected-species",
         "ref_genome_accession",
         "metadata_file",
+        "project_type",
     ]
     df.drop(columns=df.columns.difference(cols_to_keep), inplace=True)
 
@@ -135,6 +136,7 @@ def read_non_minicore(file: Path) -> pd.DataFrame:
         df["ccgp-project-id"].unique().tolist()[0]
     )
     df["metadata_file"] = str(file)
+    df["project_type"] = "Non-Minicore"
     return df
 
 
@@ -163,6 +165,7 @@ def get_summary_df(df) -> pd.DataFrame:
             "*sample_name",
             "*organism",
             "expected-species",
+            "project_type",
         ]
     ]
     grouped = subset.groupby("ccgp-project-id")
@@ -173,7 +176,9 @@ def get_summary_df(df) -> pd.DataFrame:
     reference_prog = wgs_sheet.reference_progress()
     expected_count = wgs_sheet.expected_count()
     percent_seq = has_reads / expected_count
-    print(expected_species)
+
+    project_type = grouped["project_type"].agg(pd.Series.mode)
+    print(project_type)
     df = pd.concat(
         {
             "Metadata recieved": total_counts,
@@ -183,6 +188,7 @@ def get_summary_df(df) -> pd.DataFrame:
             "Reference Stage": reference_prog,
             "Expected # of samples": expected_count,
             "% Done": percent_seq,
+            "Project Type": project_type,
         },
         axis=1,
     )
