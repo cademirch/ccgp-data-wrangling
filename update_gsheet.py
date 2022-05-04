@@ -3,13 +3,13 @@ import numpy as np
 import pandas as pd
 import parse
 from db import get_mongo_client
-
+from os import environ
 
 def update_wgs_gsheet(db_client) -> None:
     db = db_client["ccgp_dev"]
     collection = db["sample_metadata"]
     df = pd.io.json.json_normalize(collection.find({}))
-    gc = pygsheets.authorize(service_file="google_secret.json")
+    gc = pygsheets.authorize(service_file=environ.get("GOOGLE_APPLICATION_CREDENTIALS"))
     sh = gc.open("WGS_METADATA_DB")
     # wks = sh.worksheet_by_title("raw")
     # wks.set_dataframe(df, (1, 1), fit=True)
