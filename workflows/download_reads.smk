@@ -1,6 +1,13 @@
 from pathlib import Path
 import os
 from snakemake.exceptions import WorkflowError
+import sys
+sys.path.append(
+    ".."
+)  # Don't like this b/c hardcodes this file structure.  but no one else will probably use this so doesn't matter
+from gdrive import CCGPDrive
+from pathlib import Path
+
 """
 To run this:
 
@@ -12,15 +19,12 @@ def get_reads(wildcards):
     checkpoint_output = checkpoints.checksums.get(**wildcards).output[0]
     reads = Path(f"downloads/{wildcards.name}/").glob("*.fastq.gz")
     reads = [x.name.replace(".fastq.gz", "") for x in reads]
-    print(reads)
-    
-    
     return expand("downloads/qc/{name}/{sample}{ext}", **wildcards, sample=reads, ext=['_fastqc.zip', '_screen.txt'])
 
 rule all:
     input:
         ancient(expand("downloads/done_files/{name}_synced_done.txt", name=config['name'])),
-        expand("downloads/qc/{name}_multiqc.html", name=config['name'])
+        expand("downloads/qc/{name}_uploaded.txt", name=config['name'])
     
     shell: "echo {config[name]}, {config[cmd]}"
 
@@ -115,3 +119,12 @@ rule multiqc:
         "logs/{name}_multiqc.log"
     wrapper:
         "v1.3.2/bio/multiqc"
+
+rule upload_multiqc:
+    input:
+        "downloads/qc/{name}_multiqc.html"
+    output:
+        touch("downloads/qc/{name}_uploaded.txt")
+    run:
+        drive = CCGPDrive()
+        drive.upload_file(Path(input[0]), "MultiQC Files")
