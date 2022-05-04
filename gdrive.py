@@ -17,6 +17,7 @@ class CCGPDrive:
         self.service = build("drive", "v3", credentials=self.creds)
 
     def _get_files_list_response(self, query: str) -> list[dict]:
+        """ "Helper function that sends creates and send query to Drive API and returns response."""
         page_token = None
         result = []
         while True:
@@ -41,20 +42,16 @@ class CCGPDrive:
                 break
         return result
 
-    def list_files_from_folder(self, folder: str) -> list[dict]:
-        def get_folder_id(folder: str) -> str:
-            query = (
-                f"name = '{folder}' and mimeType = 'application/vnd.google-apps.folder'"
-            )
-            found = self._get_files_list_response(query)
-            if len(found) == 0:
-                raise AssertionError(
-                    f"Search for folder '{folder}' returned no results."
-                )
-            result = found[0].get("id")
-            return result
+    def get_folder_id(self, folder: str) -> str:
+        query = f"name = '{folder}' and mimeType = 'application/vnd.google-apps.folder'"
+        found = self._get_files_list_response(query)
+        if len(found) == 0:
+            raise AssertionError(f"Search for folder '{folder}' returned no results.")
+        result = found[0].get("id")
+        return result
 
-        folder_id = get_folder_id(folder)
+    def list_files_from_folder(self, folder: str) -> list[dict]:
+        folder_id = self.get_folder_id(folder)
         query = f"'{folder_id}' in parents"
         found = self._get_files_list_response(query)
         return found
@@ -79,9 +76,12 @@ class CCGPDrive:
             while done is False:
                 status, done = downloader.next_chunk()
 
-    def upload_file(self, file: Path, folder_id: str) -> None:
-
-        file_metadata = {"name": file.name, "parents": [folder_id]}
+    def upload_file(self, file: Path, folder_name: str = None) -> None:
+        if folder_name is not None:
+            folder_id = self.get_folder_id(folder_name)
+            file_metadata = {"name": file.name, "parents": [folder_id]}
+        else:
+            file_metadata = {"name": file.name}
         media = MediaFileUpload(file)
         up = (
             self.service.files()
