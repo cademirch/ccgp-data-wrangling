@@ -8,3 +8,5 @@ logs/*
 workflows/downloads/*
 workflows/FastQ_Screen_Genomes
 workflows/logs*
+.env
+google_secret.json
