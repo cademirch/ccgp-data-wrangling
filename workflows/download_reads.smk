@@ -1,18 +1,20 @@
 from pathlib import Path
 import os
-
+from snakemake.exceptions import WorkflowError
 """
 To run this:
 
-snakemake --nolock --use-conda --cores N --config cmd='<download command>' --config name='<name of the sequencing run>'
+snakemake --nolock --use-conda --cores N --config cmd='<download command>' name='<name of the sequencing run>'
 
 """
 
 def get_reads(wildcards):
     checkpoint_output = checkpoints.checksums.get(**wildcards).output[0]
-    reads = Path(f"{wildcards.name}/").glob("*.fastq.gz")
-    reads = [x.name for x in reads]
-    reads = [str(x).strip(".fastq.gz") for x in reads]
+    reads = Path(f"downloads/{wildcards.name}/").glob("*.fastq.gz")
+    reads = [x.name.replace(".fastq.gz", "") for x in reads]
+    print(reads)
+    
+    
     return expand("downloads/qc/{name}/{sample}{ext}", **wildcards, sample=reads, ext=['_fastqc.zip', '_screen.txt'])
 
 rule all:
@@ -20,7 +22,7 @@ rule all:
         ancient(expand("downloads/done_files/{name}_synced_done.txt", name=config['name'])),
         expand("downloads/qc/{name}_multiqc.html", name=config['name'])
     
-    shell: "rm -rf {config[name]}"
+    shell: "echo {config[name]}, {config[cmd]}"
 
 
 rule download:
@@ -33,40 +35,44 @@ rule download:
         "mkdir -p {wildcards.name} && cd {wildcards.name} && {params.cmd}"
 
 checkpoint checksums:
-    """Goes to config[name] and checks for md5sum.txt prints original checksums to name_md5sums.txt so its included in aws sync. Then checks the sums."""
+    """
+    Goes to config[name] and checks for md5sum.txt prints original checksums to name_md5sums.txt so its included in aws sync. Then checks the sums.
+    This rule is a checkpoint so that if the md5sum fails then the workflow stops!
+    """
     input:
         ancient("downloads/done_files/download_{name}_done.txt")
     output:
-        touch("downloads/{name}/checksums_done.txt")
+        touch("downloads/{name}/checksums_done")
     run:
-        os.chdir(os.path.join("downloads", wildcards.name))
-        if Path("md5sum.txt").exists():
-            with open(Path("md5sum.txt"), "r") as f:
-                outfile = Path(f"{wildcards.name}_md5sums.txt")
+        if Path("downloads", wildcards.name, "md5sum.txt").exists():
+            with open(Path("downloads", wildcards.name, "md5sum.txt"), "r") as f:
+                outfile = Path("downloads", wildcards.name, f"{wildcards.name}_md5sums.txt")
                 with open(outfile, "w") as o:
                     for line in f:
                         line = line.strip().split()
                         sha = line[0]
-                        filename = Path(line[1]).name
+                        filename = Path("downloads", wildcards.name, Path(line[1]).name) # Path to file in md5sum txt relative to snakefile
                         print(f"{sha}  {filename}", file=o)
-            checksums = Path(f"{wildcards.name}_checkedsums.txt")
+            checksums = Path("downloads", wildcards.name, f"{wildcards.name}_checkedsums.txt")
             shell(f"md5sum -c {outfile} > {checksums}") # This will exit with code 1 if a checksum doesnt match
+        else:
+            raise WorkflowError(f"No md5sum for {wildcards.name}, to work around this you can touch this file: {output[0]}")
         return True
         
 rule sync:
     """Syncs to AWS s3 bucket """
     input:
-        ancient("downloads/{name}/checksums_done.txt")
+        ancient("downloads/{name}/checksums_done")
     output:
         touch("downloads/done_files/{name}_synced_done.txt")
     shell:
-        "aws s3 sync {wildcards.name}/ s3://ccgp --endpoint=http://10.50.1.41:7480/"
+        "aws s3 sync downloads/{wildcards.name}/ s3://ccgp --endpoint=http://10.50.1.41:7480/"
 
 
 rule fastqc:
     input:
         ancient("downloads/{name}/{sample}.fastq.gz"),
-        ancient("downloads/{name}/checksums_done.txt")
+        
     output:
         html=temp("downloads/qc/{name}/{sample}.html"),
         zip="downloads/qc/{name}/{sample}_fastqc.zip" 
@@ -80,7 +86,7 @@ rule fastqc:
 rule fastq_screen:
     input:
         ancient("downloads/{name}/{sample}.fastq.gz"),
-        ancient("downloads/{name}/checksums_done.txt")
+        
     output:
         txt=("downloads/qc/{name}/{sample}_screen.txt"),
         html=temp("downloads/qc/{name}/{sample}_screen.html"),

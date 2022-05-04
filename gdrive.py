@@ -2,7 +2,7 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 import google.auth
 import io
-from googleapiclient.http import MediaIoBaseDownload
+from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
 from pathlib import Path
 
 SCOPES = ["https://www.googleapis.com/auth/drive"]
@@ -60,6 +60,7 @@ class CCGPDrive:
         return found
 
     def download_files(self, *files: dict) -> None:
+        """Downloads files to current directory."""
         for file in files:
             if Path(file["name"]).exists():
                 print(
@@ -77,3 +78,14 @@ class CCGPDrive:
             print("Downloading file " + "'" + file["name"] + "'")
             while done is False:
                 status, done = downloader.next_chunk()
+
+    def upload_file(self, file: Path, folder_id: str) -> None:
+
+        file_metadata = {"name": file.name, "parents": [folder_id]}
+        media = MediaFileUpload(file)
+        up = (
+            self.service.files()
+            .create(body=file_metadata, media_body=media, fields="id")
+            .execute()
+        )
+        print("Uploaded file: " + "'" + file.name + "'")
