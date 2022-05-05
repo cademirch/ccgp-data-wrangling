@@ -14,7 +14,8 @@ docs = collection.find({"ccgp-project-id": config['pid']})
 files = []
 for doc in docs:
     try:
-        files.extend(*doc['files'])
+        for file in doc['files']:
+            files.append(file)
     except KeyError:
         print(f"{doc['*sample_name']} did not have any files.")
             
