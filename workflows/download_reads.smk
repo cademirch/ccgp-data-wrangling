@@ -7,6 +7,8 @@ sys.path.append(
 )  # Don't like this b/c hardcodes this file structure.  but no one else will probably use this so doesn't matter
 from gdrive import CCGPDrive
 from pathlib import Path
+import shutil
+from datetime import datetime
 
 """
 To run this:
@@ -59,6 +61,10 @@ checkpoint checksums:
                         print(f"{sha}  {filename}", file=o)
             checksums = Path("downloads", wildcards.name, f"{wildcards.name}_checkedsums.txt")
             shell(f"md5sum -c {outfile} > {checksums}") # This will exit with code 1 if a checksum doesnt match
+            undetermined = Path("downloads", wildcards.name).glob("Undetermined*")
+            for u in undetermined:  # Rename undetermined files for saving with sync.
+                dest = Path(u.parent, f"test_{datetime.now().strftime('%Y-%m-%d')}_{u.name}")
+                shutil.move(u, dest)
         else:
             raise WorkflowError(f"No md5sum for {wildcards.name}, to work around this you can touch this file: {output[0]}")
         return True

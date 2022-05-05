@@ -1,23 +1,26 @@
 import pymongo
 import pandas as pd
 import sys
+sys.path.append(
+    ".."
+)
 from db import get_mongo_client
 
 client = get_mongo_client()
 db = client['ccgp_dev']
 collection = db['sample_metadata']
 
-docs = collection.find({"ccgp-project-id": config['project_id']})
+docs = collection.find({"ccgp-project-id": config['pid']})
 files = []
 for doc in docs:
     try:
-        files.extend(doc['files'])
+        files.extend(*doc['files'])
     except KeyError:
         print(f"{doc['*sample_name']} did not have any files.")
             
 rule all:
     input:
-        expand("done_files/done_{file}", file=files)
+        expand("done_files/{project_id}/done_{file}", file=files project_id=config['pid'])
         
 rule download_from_s3:
     output:
@@ -29,7 +32,7 @@ rule upload_to_google:
     input:
         "ccgp/{file}"
     output:
-        touch("done_files/done_{file}")
+        touch("done_files/{project_id}, done_{file}")
     shell:
-        "gsutil cp -n {input} gs://ccgp-raw-reads/{config[project_id]}/"
+        "gsutil cp -n {input} gs://ccgp-raw-reads/{config[pid]}/"
 
