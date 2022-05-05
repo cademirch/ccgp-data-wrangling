@@ -20,7 +20,7 @@ for doc in docs:
             
 rule all:
     input:
-        expand("done_files/{project_id}/done_{file}", file=files project_id=config['pid'])
+        expand("done_files/{project_id}/done_{file}", file=files, project_id=config['pid'])
         
 rule download_from_s3:
     output:
@@ -32,7 +32,7 @@ rule upload_to_google:
     input:
         "ccgp/{file}"
     output:
-        touch("done_files/{project_id}, done_{file}")
+        touch("done_files/{project_id}/done_{file}")
     shell:
         "gsutil cp -n {input} gs://ccgp-raw-reads/{config[pid]}/"
 
