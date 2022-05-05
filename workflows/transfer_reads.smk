@@ -15,7 +15,8 @@ files = []
 for doc in docs:
     try:
         for file in doc['files']:
-            files.append(file)
+            for f in file:
+                files.append(f)
     except KeyError:
         print(f"{doc['*sample_name']} did not have any files.")
             
