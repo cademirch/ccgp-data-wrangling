@@ -10,6 +10,7 @@ from thefuzz import process
 from pathlib import Path
 from datetime import datetime
 import argparse
+from itertools import chain
 
 
 def preprocess_dataframe(df: pd.DataFrame) -> pd.DataFrame:
@@ -17,40 +18,43 @@ def preprocess_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     list_of_dicts = []
     for _, row in df.iterrows():
         record = row.to_dict()
-        files = sorted(record["files"])
-        if len(files) == 2:
-            record["filename"] = files[0]
-            record["filename2"] = files[1]
-            record["library_ID"] = record["filename"].split("_R1")[0]
-            record["title"] = f"Whole genome sequencing of {record['*organism']}"
-            list_of_dicts.append(record)
+        try:
+            files = sorted(list(chain.from_iterable(record["files"])))
+            if len(files) == 2:
+                record["filename"] = files[0]
+                record["filename2"] = files[1]
+                record["library_ID"] = record["filename"].split("_R1")[0]
+                record["title"] = f"Whole genome sequencing of {record['*organism']}"
+                list_of_dicts.append(record)
 
-        elif len(files) >= 4:
+            elif len(files) >= 4:
 
-            prefixes = set()
-            for file in files:
-                prefixes.add(
-                    re.split("_R\d[._]", file)[0]
-                )  # this splits on the _R1/R2 of the filename
+                prefixes = set()
+                for file in files:
+                    prefixes.add(
+                        re.split("_R\d[._]", file)[0]
+                    )  # this splits on the _R1/R2 of the filename
 
-            # Using fuzzy matching here for the following example case:
-            # sample has two sets of reads: samp_a1_R1.fq.gz and samp_a1_L001_R1.fq.gz
-            # Splitting on R1 gives two prefixes, samp_a1_R1 and samp_a1_L001, the former is a substring of the latter,
-            # So something like [f for f in files if p in f for p in prefixes] doesn't work to find pairs of reads.
-            pairs = []
-            for p in prefixes:
-                matches = process.extract(p, files, limit=2)
-                pairs.append([matches[0][0], matches[1][0]])
+                # Using fuzzy matching here for the following example case:
+                # sample has two sets of reads: samp_a1_R1.fq.gz and samp_a1_L001_R1.fq.gz
+                # Splitting on R1 gives two prefixes, samp_a1_R1 and samp_a1_L001, the former is a substring of the latter,
+                # So something like [f for f in files if p in f for p in prefixes] doesn't work to find pairs of reads.
+                pairs = []
+                for p in prefixes:
+                    matches = process.extract(p, files, limit=2)
+                    pairs.append([matches[0][0], matches[1][0]])
 
-            for pair in pairs:
-                record_copy = copy.deepcopy(record)
-                record_copy["filename"] = pair[0]
-                record_copy["filename2"] = pair[1]
-                record_copy["library_ID"] = record_copy["filename"].split("_R1")[0]
-                record_copy[
-                    "title"
-                ] = f"Whole genome sequencing of {record_copy['*organism']}"
-                list_of_dicts.append(record_copy)
+                for pair in pairs:
+                    record_copy = copy.deepcopy(record)
+                    record_copy["filename"] = pair[0]
+                    record_copy["filename2"] = pair[1]
+                    record_copy["library_ID"] = record_copy["filename"].split("_R1")[0]
+                    record_copy[
+                        "title"
+                    ] = f"Whole genome sequencing of {record_copy['*organism']}"
+                    list_of_dicts.append(record_copy)
+        except TypeError:
+            continue
     out_df = pd.DataFrame(list_of_dicts)
     return out_df
 
@@ -66,6 +70,16 @@ def create_workflow_sheet(
     df = preprocess_dataframe(
         pd.DataFrame(list(ccgp_samples.find({"ccgp-project-id": project_id})))
     )
+    if "lat_lon" in df.columns:
+
+        if df["lat_lon"].isna().all():
+            df = df.drop(columns=["lat_lon"])
+        else:
+            df["lat"] = df["lat_lon"].apply(lambda x: x.split(",")[0])
+            df["long"] = df["lat_lon"].apply(lambda x: x.split(",")[1])
+            df = df.drop(
+                columns=["lat_lon"],
+            )
     workflow_df = df[
         [
             "*sample_name",
@@ -76,19 +90,10 @@ def create_workflow_sheet(
             "filename2",
             "lat",
             "long",
-            "lat_lon",
             "ccgp-project-id",
         ]
     ]
 
-    if workflow_df["lat_lon"].isna().all():
-        workflow_df = workflow_df.drop(columns=["lat_lon"])
-    else:
-        workflow_df["lat"] = workflow_df["lat_lon"].apply(lambda x: x.split(",")[0])
-        workflow_df["long"] = workflow_df["lat_lon"].apply(lambda x: x.split(",")[1])
-        workflow_df = workflow_df.drop(
-            columns=["lat_lon"],
-        )
     workflow_df["ref_genome_accession"] = workflow_df["ref_genome_accession"].replace(
         "NaN",
         "refGenomePlaceholder",
@@ -115,8 +120,8 @@ def create_workflow_sheet(
     workflow_df["BioProject"] = workflow_df["Organism"]
     workflow_df = workflow_df.drop_duplicates()
     filename = f"{project_id}_workflow.csv"
-    filepath = os.path.join("..", "workflow_sheets", filename)
-    workflow_df.to_csv(filepath, index=False)
+
+    workflow_df.to_csv(filename, index=False)
     ccgp_workflow_progress.update_one(
         filter={"project_id": project_id},
         update={"$set": {"workflow_sheet_created": datetime.utcnow()}},
@@ -161,7 +166,7 @@ def create_sra_sheet(
     sra_df = sra_df[sra_cols]
     filename = f"{project_id}_sra.tsv"
     filepath = os.path.join("..", "sra_sheets", filename)
-    sra_df.to_csv(filepath, index=False, sep="\t")
+    sra_df.to_csv(filename, index=False, sep="\t")
     ccgp_workflow_progress.update_one(
         filter={"project_id": project_id},
         update={"$set": {"sra_sheet_created": datetime.utcnow()}},
