@@ -53,7 +53,7 @@ def find_header_line_num(file: Path) -> int:
     """Find the line number of the header in a file."""
     with open(file, "r", errors="ignore") as f:
         for i, line in enumerate(f):
-            if line.split("\t")[0] == ("*sample_name"):
+            if "*sample_name" in line.split("\t"):
                 return i
     raise (ValueError(f"Could not find header in {file}"))
 
@@ -178,7 +178,9 @@ def get_summary_df(df) -> pd.DataFrame:
     percent_seq = has_reads / expected_count
 
     project_type = grouped["project_type"].agg(pd.Series.mode)
-    print(project_type)
+    files_na = subset[subset["files"].isna()]
+    files_na = files_na.groupby("ccgp-project-id")["*sample_name"].apply(list)
+
     df = pd.concat(
         {
             "Metadata recieved": total_counts,
@@ -189,6 +191,7 @@ def get_summary_df(df) -> pd.DataFrame:
             "Expected # of samples": expected_count,
             "% Done": percent_seq,
             "Project Type": project_type,
+            "Samples missing data": files_na,
         },
         axis=1,
     )
