@@ -13,9 +13,10 @@ from datetime import datetime
 """
 To run this:
 
-snakemake --nolock --use-conda --cores N --config cmd='<download command>' name='<name of the sequencing run>'
-
+snakemake --nolock --use-conda --cores N --configfile <config>'
 """
+
+
 
 def get_reads(wildcards):
     checkpoint_output = checkpoints.checksums.get(**wildcards).output[0]
@@ -37,8 +38,9 @@ rule download:
         touch("downloads/done_files/download_{name}_done.txt")
     params:
         cmd = config['cmd']
+        dl_dir = "downloads/{name}"
     shell:
-        "mkdir -p {wildcards.name} && cd {wildcards.name} && {params.cmd}"
+        "mkdir -p {params.dl_dir} && cd {params.dl_dir} && {params.cmd}"
 
 checkpoint checksums:
     """
@@ -75,8 +77,10 @@ rule sync:
         ancient("downloads/{name}/checksums_done")
     output:
         touch("downloads/done_files/{name}_synced_done.txt")
+    params:
+        dl_dir = "downloads/{name}"
     shell:
-        "aws s3 sync downloads/{wildcards.name}/ s3://ccgp --endpoint=http://10.50.1.41:7480/"
+        "aws s3 sync {params.dl_dir}/ s3://ccgp --endpoint=http://10.50.1.41:7480/"
 
 
 rule fastqc:
