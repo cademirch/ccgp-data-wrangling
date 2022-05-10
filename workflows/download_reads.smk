@@ -37,7 +37,7 @@ rule download:
     output:
         touch("downloads/done_files/download_{name}_done.txt")
     params:
-        cmd = config['cmd']
+        cmd = config['cmd'],
         dl_dir = "downloads/{name}"
     shell:
         "mkdir -p {params.dl_dir} && cd {params.dl_dir} && {params.cmd}"
