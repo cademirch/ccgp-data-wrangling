@@ -1,7 +1,8 @@
 import pygsheets
 import numpy as np
 import pandas as pd
-
+from dotenv import load_dotenv
+import os
 
 """Classes and functions for interacting with Google Sheets."""
 
@@ -10,7 +11,10 @@ class WGSTracking:
     """Class for getting data from WGSTracking sheet."""
 
     def __init__(self) -> None:
-        gc = pygsheets.authorize(service_file="google_secret.json")
+        load_dotenv()
+        gc = pygsheets.authorize(
+            service_file=os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+        )
         self.sh = gc.open("WGSTracking")
 
     def _get_column_as_series(self, column: str) -> pd.Series:

@@ -8,12 +8,6 @@ from collections import defaultdict
 from gsheets import WGSTracking
 
 
-def get_already_read() -> set:
-    with open("parsed_submissions.txt", "r") as f:
-        already_read = set([line.rstrip() for line in f.readlines()])
-    return already_read
-
-
 def get_project_id(series: pd.Series) -> dict[str:str]:
     """Takes series of species and looks up what project-id it belongs to and returns that id"""
 
@@ -29,6 +23,7 @@ def get_project_id(series: pd.Series) -> dict[str:str]:
                 genuses[genus] = project_id
         return project_ids, genuses
 
+    series = series.dropna()
     spp_lookup, genus_lookup = create_dict()
     out = [[], []]
     for s in series:
@@ -56,7 +51,14 @@ def find_header_line_num(file: Path) -> int:
             if "*sample_name" in line.split("\t"):
                 return i
     raise (ValueError(f"Could not find header in {file}"))
-
+def read_sheet(file: Path) -> pd.DataFrame:
+    
+    if "minicore" in file.name.lower():
+        df = read_minicore_sheet(file)
+    else:
+        df = read_non_minicore(file)
+    
+    return df
 
 def read_minicore_sheet(file: Path) -> pd.DataFrame:
     w = WGSTracking()
@@ -68,6 +70,7 @@ def read_minicore_sheet(file: Path) -> pd.DataFrame:
     df.drop(
         df.columns[[0]], axis=1, inplace=True
     )  # Drop the first column (sample number)
+    df = df[df["SampleID*"].notna()]
     df.dropna(how="all", inplace=True)
     df["ccgp-project-id"], df["expected-species"] = get_project_id(df["Genus species*"])
     df["ref_genome_accession"] = w.reference_accession(
@@ -168,6 +171,7 @@ def get_summary_df(df) -> pd.DataFrame:
             "project_type",
         ]
     ]
+
     grouped = subset.groupby("ccgp-project-id")
     total_counts = grouped.size()
     has_reads = grouped["files"].count()
@@ -197,5 +201,5 @@ def get_summary_df(df) -> pd.DataFrame:
     )
     df.reset_index(inplace=True)
     df.sort_values(by=["% Done"], inplace=True, ascending=False)
-
+    print(df.shape)
     return df

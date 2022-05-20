@@ -12,7 +12,7 @@ def update_wgs_gsheet(db_client) -> None:
     db = db_client["ccgp_dev"]
     collection = db["sample_metadata"]
     df = pd.io.json.json_normalize(collection.find({}))
-    print(environ["GOOGLE_APPLICATION_CREDENTIALS"])
+
     gc = pygsheets.authorize(service_file=environ.get("GOOGLE_APPLICATION_CREDENTIALS"))
     sh = gc.open("WGS_METADATA_DB")
     # wks = sh.worksheet_by_title("raw")

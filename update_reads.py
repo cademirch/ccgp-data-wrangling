@@ -5,6 +5,9 @@ from os import getenv
 from db import get_mongo_client
 from pymongo.errors import BulkWriteError
 from pprint import pprint
+from collections import defaultdict
+import pandas as pd
+import re
 
 
 def list_s3_bucket_objs():
@@ -53,9 +56,9 @@ def link_files_to_metadata(db_client: pymongo.MongoClient):
     metadata = db["sample_metadata"]
     reads = db["reads"]
     sample_names = list(
-        metadata.find({}, {"*sample_name": 1})
+        metadata.find({}, {"*sample_name": 1, "Preferred Sequence ID": 1})
     )  # Get all samples regardless if it has files b/c they might want new files
-    orphan_reads = list(reads.find({"orphan": True}))
+    orphan_reads = list(reads.find({}))
     print(f"Found {len(orphan_reads)} orphan reads.")
     metadata_ops = []
     reads_ops = []
@@ -63,23 +66,55 @@ def link_files_to_metadata(db_client: pymongo.MongoClient):
     matched_files = 0
     for sample in sample_names:
         name = sample["*sample_name"]
-        found_files = [item for item in orphan_reads if f"{name}_" in item["file_name"]]
+        pref_id = sample.get("Preferred Sequence ID")
+        # print(f"{name=}, {pref_id=}")
+        if (
+            pref_id is not None
+            and not pd.isna(pref_id)
+            and len(str(pref_id)) > len(name)
+        ):
+
+            name = str(pref_id).replace(".", "-").replace(" ", "_")
+        found_files = [
+            item
+            for item in orphan_reads
+            if f"{name}"
+            in re.sub("_S\d+?_L\d+?_R\d_\d+?.fastq.gz", "", item["file_name"])
+        ]
+        if not found_files:
+            if "-" in name:
+                cand_name = name.replace("-", "_")
+                found_files = [
+                    item
+                    for item in orphan_reads
+                    if f"{cand_name}"
+                    in re.sub("_S\d+?_L\d+?_R\d_\d+?.fastq.gz", "", item["file_name"])
+                ]
+            elif "_" in name:
+                cand_name = name.replace("_", "-")
+                found_files = [
+                    item
+                    for item in orphan_reads
+                    if f"{cand_name}"
+                    in re.sub("_S\d+?_L\d+?_R\d_\d+?.fastq.gz", "", item["file_name"])
+                ]
         if found_files:
             matches += 1
             matched_files += len(found_files)
-            date_recieved = found_files[0][
-                "mdate"
-            ]  #  Take mdate of first file for simplicity's sake
+            dates = defaultdict(list)
+            for f in found_files:
+                dates[f["mdate"].date()].append(f["mdate"])
+            dates = [dates[d][0] for d in dates.keys()]
             filesize_sum = sum([file["filesize"] for file in found_files])
             files = [file["file_name"] for file in found_files]
-            print(f"Matched {sample} with {files}.")
+            print(f"Matched sample_name: '{name}' with {files}.")
             metadata_ops.append(
                 pymongo.operations.UpdateOne(
                     filter={"*sample_name": name},
                     update={
-                        "$addToSet": {"files": files},
                         "$set": {
-                            "recieved": date_recieved,
+                            "files": files,
+                            "recieved": dates,
                             "filesize_sum": filesize_sum,
                         },
                     },

@@ -14,20 +14,17 @@ from collections import defaultdict
 import traceback
 
 
-def update_metadata(db_client: pymongo.MongoClient, force=False):
+def update_metadata(db_client: pymongo.MongoClient, force=False, file: str = None):
     """Parses metadata sheets from minicore and non minicore sources and updates database."""
     db = db_client["ccgp_dev"]
     collection = db["sample_metadata"]
     parsed_metadatas = db["parsed_metadata_files"]
     ccgp_workflow_progress = db["workflow_progress"]
 
-    if force:
+    if force or file is not None:
         already_read = []
     else:
-        already_read = [
-            doc.get("file_name")
-            for doc in parsed_metadatas.find({"error": {"$exists": False}})
-        ]
+        already_read = [doc.get("file_name") for doc in parsed_metadatas.find({})]
 
     drive = CCGPDrive()
 
@@ -41,21 +38,22 @@ def update_metadata(db_client: pymongo.MongoClient, force=False):
         for item in drive.list_files_from_folder("Minicore Submissions")
         if item["name"] not in already_read
     ]
-
-    if not non_minicore_files and not minicore_files:
+    files = non_minicore_files + minicore_files
+    if not files:
         print("Nothing to be done.")
         return
-
+    if file is not None:
+        files = [item for item in files if file in item["name"]]
     metadata_ops = []
     workflow_prog_ops = []
     parsed_ops = []
     project_ids = defaultdict(int)
     try:
-        for file in minicore_files:
+        for file in files:
             file_name = file["name"]
             drive.download_files(file)
             print("Processing file: " + "'" + file_name + "'")
-            df = parse.finalize_df(parse.read_minicore_sheet(Path(file_name)))
+            df = parse.finalize_df(parse.read_sheet(Path(file_name)))
             print(f"Got a DataFrame of this shape: {df.shape}")
             for _, row in df.iterrows():
                 record = row.to_dict()
@@ -89,43 +87,6 @@ def update_metadata(db_client: pymongo.MongoClient, force=False):
             print("Done processing file: " + "'" + file_name + "'")
             Path(file_name).unlink()
 
-        for file in non_minicore_files:
-            file_name = file["name"]
-            drive.download_files(file)
-            print("Processing file: " + "'" + file_name + "'")
-            df = parse.finalize_df(parse.read_non_minicore(Path(file_name)))
-            print(f"Got a DataFrame of this shape: {df.shape}")
-            for _, row in df.iterrows():
-                record = row.to_dict()
-                project_ids[record["ccgp-project-id"]] += 1
-                print(
-                    f"Procesed sample {record['*sample_name']} in project {record['ccgp-project-id']}"
-                )
-                metadata_ops.append(
-                    pymongo.operations.UpdateOne(
-                        filter={"*sample_name": record["*sample_name"]},
-                        update={"$set": record},
-                        upsert=True,
-                    )
-                )
-            counts = (file_name, project_ids[record["ccgp-project-id"]])
-            workflow_prog_ops.append(
-                pymongo.operations.UpdateOne(
-                    filter={"project_id": record["ccgp-project-id"]},
-                    update={"$addToSet": {"Metadata recieved": counts}},
-                    upsert=True,
-                )
-            )
-
-            parsed_ops.append(
-                pymongo.operations.UpdateOne(
-                    filter={"file_name": file_name},
-                    update={"$set": {"file_name": file_name}},
-                    upsert=True,
-                )
-            )
-            print("Done processing file: " + "'" + file_name + "'")
-            Path(file_name).unlink()
     except Exception as e:  # Try to catch erros when processing a file.
         error_message = traceback.format_exc()
         print(f"Caught exception processing file: {file_name}:")
@@ -228,7 +189,13 @@ def main():
         dest="force",
         required=False,
         action="store_true",
-        help="Project id to generate sheets for.",
+        help="Force rerun all sheets",
+    )
+    metadata.add_argument(
+        dest="file",
+        nargs="?",
+        default=None,
+        help="Run this specific file",
     )
     attributes = subparser.add_parser(
         "attributes", description="Update biosample accessions"
@@ -245,11 +212,11 @@ def main():
 
     if args.command == "metadata":
 
-        update_metadata(db, force)
+        update_metadata(db, force, args.file)
     elif args.command == "attributes":
         add_biosample_accessions(db)
     elif args.command == "both":
-        update_metadata(db, force)
+        update_metadata(db, force, args.file)
         add_biosample_accessions(db)
 
 

@@ -78,12 +78,14 @@ class CCGPDrive:
             while done is False:
                 status, done = downloader.next_chunk()
 
-    def upload_file(self, file: Path, folder_name: str = None, folder_id: str = None) -> None:
+    def upload_file(
+        self, file: Path, folder_name: str = None, folder_id: str = None
+    ) -> None:
         if folder_name is not None and folder_id is None:
             folder_id = self.get_folder_id(folder_name)
             if folder_id == False:
-               folder_id = self.create_folder(folder_name)
-               file_metadata = {"name": file.name, "parents": [folder_id]}
+                folder_id = self.create_folder(folder_name)
+                file_metadata = {"name": file.name, "parents": [folder_id]}
         elif folder_id is not None:
             file_metadata = {"name": file.name, "parents": [folder_id]}
         else:
@@ -98,18 +100,22 @@ class CCGPDrive:
 
     def create_folder(self, folder_name: str, parent_id: str = None) -> str:
         """ "Creates folder and returns id"""
-        
+
         if parent_id is None:
             parent_id = self.get_folder_id("Project Results")
-        
-        
+
         file_metadata = {
-                "name": folder_name,
-                "parents": [parent_id],
-                "mimeType": "application/vnd.google-apps.folder",
-            }
-        file = self.service.files().create(body=file_metadata, fields="id", supportsAllDrives=True).execute()
+            "name": folder_name,
+            "parents": [parent_id],
+            "mimeType": "application/vnd.google-apps.folder",
+        }
+        file = (
+            self.service.files()
+            .create(body=file_metadata, fields="id", supportsAllDrives=True)
+            .execute()
+        )
         return file.get("id")
+
 
 def main():
     g = CCGPDrive()
@@ -117,5 +123,5 @@ def main():
     bye = g.create_folder("bye", hi)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
