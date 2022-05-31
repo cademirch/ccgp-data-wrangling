@@ -19,7 +19,8 @@ def preprocess_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     for _, row in df.iterrows():
         record = row.to_dict()
         try:
-            files = sorted(list(chain.from_iterable(record["files"])))
+            files = sorted(record["files"])
+            print(files)
             if len(files) == 2:
                 record["filename"] = files[0]
                 record["filename2"] = files[1]
