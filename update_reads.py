@@ -8,6 +8,15 @@ from pprint import pprint
 from collections import defaultdict
 import pandas as pd
 import re
+from itertools import chain, combinations
+from thefuzz import fuzz
+from collections import namedtuple
+
+
+def powerset(iterable):
+    "powerset([1,2,3]) --> () (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)"
+    s = list(iterable)
+    return chain.from_iterable(combinations(s, r) for r in range(len(s) + 1))
 
 
 def list_s3_bucket_objs():
@@ -36,7 +45,6 @@ def update_db_all(db_client: pymongo.MongoClient, files):
                 filter={"file_name": file.key},
                 update={
                     "$setOnInsert": {
-                        "orphan": True,
                         "filesize": file.size,
                         "mdate": file.last_modified,
                     }
@@ -50,64 +58,104 @@ def update_db_all(db_client: pymongo.MongoClient, files):
         pprint(bwe.details)
 
 
+def search(sample: dict, files: list[dict]):
+    def find_files(q: str) -> list[dict]:
+        found = [file for file in files if f"{q}_" in file["file_name"]]
+        if found:
+            return found
+        return False
+
+    found_files = False
+    pref_id = sample.get("Preferred Sequence ID")
+
+    if pref_id is not None and not pd.isna(pref_id):
+        pref_id = (
+            str(sample.get("Preferred Sequence ID")).replace(".", "_").replace(" ", "_")
+        )
+        found_files = find_files(pref_id)
+        if found_files:
+            return (sample, True, found_files)
+    else:
+        found_files = find_files(sample.get("*sample_name"))
+        if found_files:
+            return (sample, False, found_files)
+
+    return False
+
+
+def solve_conflict(file: str, samples: list[dict[dict]]) -> str:
+    """Try to figure out which sample best fits filename using fuzzy matching"""
+
+    ratios = {}
+
+    for s in samples:
+        name = s["sample"]["*sample_name"]
+        pref_id_bool = s["pref_id_bool"]
+
+        if pref_id_bool:
+            ratios[name] = fuzz.ratio(s["sample"]["Preferred Sequence ID"], file)
+
+        else:
+            ratios[name] = fuzz.ratio(s["sample"]["*sample_name"], file)
+
+    return max(ratios, key=lambda k: ratios[k])
+
+
 def link_files_to_metadata(db_client: pymongo.MongoClient):
     """Links fastq files to sample names in samples db."""
+
     db = db_client["ccgp_dev"]
     metadata = db["sample_metadata"]
-    reads = db["reads"]
+    reads_db = db["reads"]
     sample_names = list(
         metadata.find({}, {"*sample_name": 1, "Preferred Sequence ID": 1})
     )  # Get all samples regardless if it has files b/c they might want new files
-    orphan_reads = list(reads.find({}))
-    print(f"Found {len(orphan_reads)} orphan reads.")
+    reads = list(reads_db.find({}))
+    print(f"Found {len(reads)} reads.")
     metadata_ops = []
     reads_ops = []
     matches = 0
     matched_files = 0
+    match_dict = defaultdict(list)
+
     for sample in sample_names:
         name = sample["*sample_name"]
-        pref_id = sample.get("Preferred Sequence ID")
-        # print(f"{name=}, {pref_id=}")
-        if (
-            pref_id is not None
-            and not pd.isna(pref_id)
-            and len(str(pref_id)) > len(name)
-        ):
+        search_result = search(sample, reads)
 
-            name = str(pref_id).replace(".", "-").replace(" ", "_")
-        found_files = [
-            item
-            for item in orphan_reads
-            if f"{name}"
-            in re.sub("_S\d+?_L\d+?_R\d_\d+?.fastq.gz", "", item["file_name"])
-        ]
-        if not found_files:
-            if "-" in name:
-                cand_name = name.replace("-", "_")
-                found_files = [
-                    item
-                    for item in orphan_reads
-                    if f"{cand_name}"
-                    in re.sub("_S\d+?_L\d+?_R\d_\d+?.fastq.gz", "", item["file_name"])
-                ]
-            elif "_" in name:
-                cand_name = name.replace("_", "-")
-                found_files = [
-                    item
-                    for item in orphan_reads
-                    if f"{cand_name}"
-                    in re.sub("_S\d+?_L\d+?_R\d_\d+?.fastq.gz", "", item["file_name"])
-                ]
+        if not search_result:
+            continue
+        else:
+            print(f"No files found for sample: '{sample}'")
+
+        matched_sample, used_pref_id, found_files = search_result
+
         if found_files:
             matches += 1
             matched_files += len(found_files)
-            dates = defaultdict(list)
-            for f in found_files:
-                dates[f["mdate"].date()].append(f["mdate"])
-            dates = [dates[d][0] for d in dates.keys()]
+            dates = [file["mdate"] for file in found_files]
             filesize_sum = sum([file["filesize"] for file in found_files])
             files = [file["file_name"] for file in found_files]
-            print(f"Matched sample_name: '{name}' with {files}.")
+
+            if len(found_files) >= 20:
+                print(
+                    f"WARNING: Found abnormal number of files ({len(found_files)}) for sample '{name}'"
+                )
+            for file in files:
+                match_dict[file].append(
+                    {
+                        "sample": matched_sample,
+                        "pref_id_bool": used_pref_id,
+                    }
+                )
+                reads_ops.append(
+                    pymongo.operations.UpdateOne(
+                        filter={"file_name": file},
+                        update={
+                            "$set": {"orphan": False},
+                        },
+                    )
+                )
+
             metadata_ops.append(
                 pymongo.operations.UpdateOne(
                     filter={"*sample_name": name},
@@ -120,19 +168,35 @@ def link_files_to_metadata(db_client: pymongo.MongoClient):
                     },
                 )
             )
-            for file in files:
-                reads_ops.append(
+
+    for k, v in match_dict.items():
+
+        if len(v) > 1:
+            matched_samples = [s["sample"]["*sample_name"] for s in v]
+
+            print(
+                f"WARNING: File: '{k}' has multiple samples associated with it: {matched_samples}"
+            )
+            best_match = solve_conflict(k, v)
+            matches_to_drop = [i for i in matched_samples if i != best_match]
+            print(
+                f"Pulling file: '{k}' from samples: {matches_to_drop} because '{best_match}' matched the file best."
+            )
+            for match in matches_to_drop:
+                metadata_ops.append(
                     pymongo.operations.UpdateOne(
-                        filter={"file_name": file}, update={"$set": {"orphan": False}}
+                        filter={"*sample_name": match},
+                        update={"$pull": {"files": k}},
                     )
                 )
+
     if not matched_files:
         print("Found no matches, exiting.")
         return
     print(f"Matched {matched_files} orphan files with {matches} samples")
     try:
         metadata.bulk_write(metadata_ops)
-        reads.bulk_write(reads_ops)
+        reads_db.bulk_write(reads_ops)
     except BulkWriteError as bwe:
         print(bwe.details)
 

@@ -74,7 +74,7 @@ class CCGPDrive:
             fh = io.FileIO(file.get("name"), "wb")
             downloader = MediaIoBaseDownload(fh, request)
             done = False
-            print("Downloading file " + "'" + file["name"] + "'")
+            print("Downloading file " + "'" + file["name"] + "," + file["id"] + "'")
             while done is False:
                 status, done = downloader.next_chunk()
 

@@ -1,4 +1,6 @@
 """This module handles parsing of the minicore sheets and biosample metadata sheets that are submitted to the me."""
+from email import header
+from os import read
 import warnings
 
 warnings.simplefilter(action="ignore", category=FutureWarning)
@@ -51,19 +53,30 @@ def find_header_line_num(file: Path) -> int:
             if "*sample_name" in line.split("\t"):
                 return i
     raise (ValueError(f"Could not find header in {file}"))
+
+
 def read_sheet(file: Path) -> pd.DataFrame:
-    
-    if "minicore" in file.name.lower():
-        df = read_minicore_sheet(file)
-    else:
+
+    if file.suffix in [".xlsx", ".xls"]:
+        df = pd.read_excel(file, nrows=20)
+        if all(
+            x in df.columns
+            for x in ["SampleID*", "Preferred Sequence ID", "Genus species*"]
+        ):  # Minicore template should have these columns. Non-minicore has different column names and should have ~12 rows of comments b4 header.
+            df = read_minicore_sheet(file)
+        else:
+            df = read_non_minicore(file)
+
+    elif file.suffix in [".tsv"]:
         df = read_non_minicore(file)
-    
+
     return df
+
 
 def read_minicore_sheet(file: Path) -> pd.DataFrame:
     w = WGSTracking()
 
-    df = pd.read_excel(file)
+    df = pd.read_excel(file, dtype="str")
     df.drop(
         index=df.index[[0, 1]], axis=0, inplace=True
     )  # Drop the first two rows (info and example)
@@ -148,9 +161,11 @@ def finalize_df(df: pd.DataFrame) -> pd.DataFrame:
 
     df = df.loc[:, ~df.columns.duplicated()]
     df = df.loc[:, ~df.columns.str.contains("^Unnamed", na=False)]
+    pd.set_option("display.max_rows", 1000)
+    print(df["*sample_name"])
     df["*sample_name"] = df["*sample_name"].astype(str)
-    # Some sample names have a period in them, it seems UCB replaces with dash so
-    df["*sample_name"] = df["*sample_name"].str.replace(".", "-")
+    # Some sample names have a period in them. Its unclear if UCB replaces these with dashes or underscores. Underscores are more common.
+    df["*sample_name"] = df["*sample_name"].str.replace(".", "_")
     # Same for spaces but underscores instead
     df["*sample_name"] = df["*sample_name"].str.replace(" ", "_")
     df.reset_index(inplace=True)
@@ -171,10 +186,11 @@ def get_summary_df(df) -> pd.DataFrame:
             "project_type",
         ]
     ]
-
+    subset["expected-species"] = subset["expected-species"].astype(int)
     grouped = subset.groupby("ccgp-project-id")
     total_counts = grouped.size()
     has_reads = grouped["files"].count()
+
     expected_species = total_counts - (grouped["expected-species"].sum() / 1)
     filesize_sum = grouped["filesize_sum"].sum() / 1e12
     reference_prog = wgs_sheet.reference_progress()

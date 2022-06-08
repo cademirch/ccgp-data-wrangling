@@ -15,12 +15,14 @@ def update_wgs_gsheet(db_client) -> None:
 
     gc = pygsheets.authorize(service_file=environ.get("GOOGLE_APPLICATION_CREDENTIALS"))
     sh = gc.open("WGS_METADATA_DB")
-    # wks = sh.worksheet_by_title("raw")
-    # wks.set_dataframe(df, (1, 1), fit=True)
+    wks = sh.worksheet_by_title("raw")
+    wks.set_dataframe(df, (1, 1), fit=True)
 
     ### summarize
     wks = sh.worksheet_by_title("summary")
     summ = parse.get_summary_df(df)
+    metadata_summary = db["summary"]
+    metadata_summary.insert_many(summ.to_dict("records"))
     wks.set_dataframe(summ, (1, 1))
 
 

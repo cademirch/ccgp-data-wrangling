@@ -13,10 +13,10 @@ collection = db['sample_metadata']
 docs = collection.find({"ccgp-project-id": config['pid']})
 files = []
 for doc in docs:
+    
     try:
         for file in doc['files']:
-            for f in file:
-                files.append(f)
+                files.append(file)
     except KeyError:
         print(f"{doc['*sample_name']} did not have any files.")
             
