@@ -18,12 +18,18 @@ snakemake --nolock --use-conda --cores N --configfile <config>'
 
 
 
-def get_reads(wildcards):
+def get_multiqc_input(wildcards):
     checkpoint_output = checkpoints.checksums.get(**wildcards).output[0]
     reads = list(Path(f"downloads/{wildcards.name}/").glob("*.fastq.gz"))
     reads.extend(list(Path(f"downloads/{wildcards.name}/").glob("*.fq.gz")))
-    reads = [x.name for x in reads]
+    reads = [x.name.replace(".fastq.gz", "").replace(".fq.gz", "") for x in reads]
     return expand("downloads/qc/{name}/{sample}{ext}", **wildcards, sample=reads, ext=['_fastqc.zip', '_screen.txt'])
+
+def get_read(wc):
+    if Path(wc.sample + "fastq.gz").exists()
+        return Path(wc.sample + "fastq.gz")
+    elif Path(wc.sample + "fq.gz").exists():
+        return Path(wc.sample + "fq.gz")
 
 rule all:
     input:
@@ -86,7 +92,7 @@ rule sync:
 
 rule fastqc:
     input:
-        ancient("downloads/{name}/{sample}"),
+        ancient(get_read),
         
     output:
         html=temp("downloads/qc/{name}/{sample}.html"),
@@ -100,7 +106,7 @@ rule fastqc:
 
 rule fastq_screen:
     input:
-        ancient("downloads/{name}/{sample}"),
+        ancient(get_read),
         
     output:
         txt=("downloads/qc/{name}/{sample}_screen.txt"),
@@ -121,7 +127,7 @@ rule fastq_screen:
 
 rule multiqc:
     input:
-        ancient(get_reads)
+        ancient(get_multiqc_input)
     output:
         "downloads/qc/{name}_multiqc.html"
     params:
