@@ -76,8 +76,8 @@ def create_workflow_sheet(
         if df["lat_lon"].isna().all():
             df = df.drop(columns=["lat_lon"])
         else:
-            df["lat"] = df["lat_lon"].apply(lambda x: x.split(",")[0])
-            df["long"] = df["lat_lon"].apply(lambda x: x.split(",")[1])
+            df["lat"] = df["lat_lon"].astype(str).replace("_", ",").apply(lambda x: x.split(",")[0])
+            df["long"] = df["lat_lon"].astype(str).replace("_", ",").apply(lambda x: x.split(",")[1])
             df = df.drop(
                 columns=["lat_lon"],
             )
