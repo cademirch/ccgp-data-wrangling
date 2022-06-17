@@ -77,7 +77,9 @@ def create_workflow_sheet(
             df = df.drop(columns=["lat_lon"])
         else:
             pd.set_option("display.max_rows", 1000)
-            df["lat_lon"] = df["lat_lon"].fillna("0,0").astype(str).replace("_", ",")
+            df["lat_lon"] = (
+                df["lat_lon"].fillna("0,0").astype(str).replace("_", ",", regex=True)
+            )
             print(df["lat_lon"])
             df["lat"] = df["lat_lon"].apply(lambda x: x.split(",")[0])
             df["long"] = df["lat_lon"].apply(lambda x: x.split(",")[1])
