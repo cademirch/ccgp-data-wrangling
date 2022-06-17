@@ -22,7 +22,7 @@ def get_reads(wildcards):
     checkpoint_output = checkpoints.checksums.get(**wildcards).output[0]
     reads = list(Path(f"downloads/{wildcards.name}/").glob("*.fastq.gz"))
     reads.extend(list(Path(f"downloads/{wildcards.name}/").glob("*.fq.gz")))
-    reads = [x.name.replace(".fastq.gz", "").replace(".fq.gz", "") for x in reads]
+    reads = [x.name for x in reads]
     return expand("downloads/qc/{name}/{sample}{ext}", **wildcards, sample=reads, ext=['_fastqc.zip', '_screen.txt'])
 
 rule all:
@@ -86,7 +86,7 @@ rule sync:
 
 rule fastqc:
     input:
-        ancient("downloads/{name}/{sample}.fastq.gz"),
+        ancient("downloads/{name}/{sample}"),
         
     output:
         html=temp("downloads/qc/{name}/{sample}.html"),
@@ -100,7 +100,7 @@ rule fastqc:
 
 rule fastq_screen:
     input:
-        ancient("downloads/{name}/{sample}.fastq.gz"),
+        ancient("downloads/{name}/{sample}"),
         
     output:
         txt=("downloads/qc/{name}/{sample}_screen.txt"),
