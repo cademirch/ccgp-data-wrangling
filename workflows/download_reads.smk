@@ -22,7 +22,7 @@ def get_reads(wildcards):
     checkpoint_output = checkpoints.checksums.get(**wildcards).output[0]
     reads = list(Path(f"downloads/{wildcards.name}/").glob("*.fastq.gz"))
     reads.extend(list(Path(f"downloads/{wildcards.name}/").glob("*.fq.gz")))
-    reads = [x.name.replace(".fastq.gz", "") for x in reads]
+    reads = [x.name.replace(".fastq.gz", "").replace(".fq.gz", "") for x in reads]
     return expand("downloads/qc/{name}/{sample}{ext}", **wildcards, sample=reads, ext=['_fastqc.zip', '_screen.txt'])
 
 rule all:
