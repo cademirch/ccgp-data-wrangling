@@ -26,10 +26,10 @@ def get_multiqc_input(wildcards):
     return expand("downloads/qc/{name}/{sample}{ext}", **wildcards, sample=reads, ext=['_fastqc.zip', '_screen.txt'])
 
 def get_read(wc):
-    if Path(wc.sample + "fastq.gz").exists():
-        return wc.sample + "fastq.gz"
-    elif Path(wc.sample + "fq.gz").exists():
-        return wc.sample + "fq.gz"
+    if Path("downloads", wildcards.name, (wc.sample + "fastq.gz")).exists():
+        return Path("downloads", wildcards.name, (wc.sample + "fastq.gz"))
+    elif Path("downloads", wildcards.name, (wc.sample + "fq.gz")).exists():
+        return Path("downloads", wildcards.name, (wc.sample + "fq.gz"))
 
 rule all:
     input:
