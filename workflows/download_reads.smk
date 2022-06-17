@@ -27,9 +27,9 @@ def get_multiqc_input(wildcards):
 
 def get_read(wc):
     if Path(wc.sample + "fastq.gz").exists():
-        return Path(wc.sample + "fastq.gz")
+        return wc.sample + "fastq.gz"
     elif Path(wc.sample + "fq.gz").exists():
-        return Path(wc.sample + "fq.gz")
+        return wc.sample + "fq.gz"
 
 rule all:
     input:
