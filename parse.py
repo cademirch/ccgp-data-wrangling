@@ -8,6 +8,25 @@ import pandas as pd
 from pathlib import Path
 from collections import defaultdict
 from gsheets import WGSTracking
+import numpy as np
+import re
+
+# https://stackoverflow.com/questions/33997361
+def dms2dd(s):
+    # example: s = """0°51'56.29"S"""
+    compass = ["N", "S", "E", "W"]
+    if any(d in s.upper() for d in compass):
+        try:
+            degrees, minutes, seconds, direction = re.split("[°'\"]+", s)
+            dd = float(degrees) + float(minutes) / 60 + float(seconds) / (60 * 60)
+            if direction in ("S", "W"):
+                dd *= -1
+            return dd
+        except ValueError:
+            print(f"DMS coordinates malformed: {s}")
+            return 0
+    else:
+        return s
 
 
 def get_project_id(series: pd.Series) -> dict[str:str]:
@@ -153,6 +172,23 @@ def read_non_minicore(file: Path) -> pd.DataFrame:
     )
     df["metadata_file"] = str(file)
     df["project_type"] = "Non-Minicore"
+    if "lat_lon" in df.columns:
+
+        if df["lat_lon"].isna().all():
+            df = df.drop(columns=["lat_lon"])
+        else:
+            df["lat_lon"] = (
+                df["lat_lon"].fillna("0,0").astype(str).replace("_", ",", regex=True)
+            )
+            # print(df["lat_lon"])
+            df["lat"] = df["lat_lon"].apply(lambda x: x.split(",")[0])
+            df["long"] = df["lat_lon"].apply(lambda x: x.split(",")[1])
+            df = df.drop(
+                columns=["lat_lon"],
+            )
+    df["lat"] = df["lat"].apply(dms2dd)
+    df["long"] = df["long"].apply(dms2dd)
+
     return df
 
 
@@ -161,13 +197,18 @@ def finalize_df(df: pd.DataFrame) -> pd.DataFrame:
 
     df = df.loc[:, ~df.columns.duplicated()]
     df = df.loc[:, ~df.columns.str.contains("^Unnamed", na=False)]
-    pd.set_option("display.max_rows", 1000)
-    print(df["*sample_name"])
+    # pd.set_option("display.max_rows", 1000)
+    # print(df["*sample_name"])
     df["*sample_name"] = df["*sample_name"].astype(str)
     # Some sample names have a period in them. Its unclear if UCB replaces these with dashes or underscores. Underscores are more common.
     df["*sample_name"] = df["*sample_name"].str.replace(".", "_")
     # Same for spaces but underscores instead
     df["*sample_name"] = df["*sample_name"].str.replace(" ", "_")
+
+    if "Preferred Sequence ID" in df.columns:
+        df["Preferred Sequence ID"] = df["Preferred Sequence ID"].astype(str)
+        df["Preferred Sequence ID"] = df["Preferred Sequence ID"].str.replace(".", "_")
+        df["Preferred Sequence ID"] = df["Preferred Sequence ID"].str.replace(" ", "_")
     df.reset_index(inplace=True)
     return df
 

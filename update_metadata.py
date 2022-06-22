@@ -55,6 +55,8 @@ def update_metadata(db_client: pymongo.MongoClient, force=False, file: str = Non
             print("Processing file: " + "'" + file_name + "'")
             df = parse.finalize_df(parse.read_sheet(Path(file_name)))
             print(f"Got a DataFrame of this shape: {df.shape}")
+            # Replace NaNs with empty string b/c JSON for web dashboard cannot encode NaN
+            df = df.fillna("")
             for _, row in df.iterrows():
                 record = row.to_dict()
                 project_ids[record["ccgp-project-id"]] += 1

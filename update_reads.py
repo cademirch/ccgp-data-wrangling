@@ -11,12 +11,9 @@ import re
 from itertools import chain, combinations
 from thefuzz import fuzz
 from collections import namedtuple
+import logging
 
-
-def powerset(iterable):
-    "powerset([1,2,3]) --> () (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)"
-    s = list(iterable)
-    return chain.from_iterable(combinations(s, r) for r in range(len(s) + 1))
+logging.basicConfig(format="%(levelname)s:%(message)s", level=logging.WARNING)
 
 
 def list_s3_bucket_objs():
@@ -59,26 +56,60 @@ def update_db_all(db_client: pymongo.MongoClient, files):
 
 
 def search(sample: dict, files: list[dict]):
+    """
+    Searches query file name in list of files. We search for the name followed by any of: ["_", "-", "."].
+    Returns a tuple of the matched sample, bool if pref_id was used for matching, and the found files.
+    """
+
     def find_files(q: str) -> list[dict]:
-        found = [file for file in files if f"{q}_" in file["file_name"]]
+        if q is None or q.lower() == "nan":
+            return False
+        found = [
+            file
+            for file in files
+            if f"{q}_" in file["file_name"]
+            or f"{q}-" in file["file_name"]
+            or f"{q}." in file["file_name"]
+        ]
         if found:
             return found
+        elif "_" in q:
+            q = q.replace("_", "-")
+            found = [
+                file
+                for file in files
+                if f"{q}_" in file["file_name"]
+                or f"{q}-" in file["file_name"]
+                or f"{q}." in file["file_name"]
+            ]
+            if found:
+                return found
+        elif "-" in q:
+            q = q.replace("-", "_")
+            found = [
+                file
+                for file in files
+                if f"{q}" in file["file_name"]
+                or f"{q}-" in file["file_name"]
+                or f"{q}." in file["file_name"]
+            ]
+            if found:
+                return found
         return False
 
-    found_files = False
     pref_id = sample.get("Preferred Sequence ID")
+    name = sample.get("*sample_name")
+    found_files = False
 
-    if pref_id is not None and not pd.isna(pref_id):
-        pref_id = (
-            str(sample.get("Preferred Sequence ID")).replace(".", "_").replace(" ", "_")
-        )
-        found_files = find_files(pref_id)
-        if found_files:
-            return (sample, True, found_files)
-    else:
-        found_files = find_files(sample.get("*sample_name"))
-        if found_files:
-            return (sample, False, found_files)
+    #  Search using pref id first.
+    found_files = find_files(pref_id)
+    if found_files:
+        return (sample, True, found_files)
+
+    #  We get here if above didnt return anything so we search w/ samplename
+    found_files = find_files(sample.get("*sample_name"))
+    if found_files:
+        return (sample, False, found_files)
 
     return False
 
@@ -97,7 +128,7 @@ def solve_conflict(file: str, samples: list[dict[dict]]) -> str:
 
         else:
             ratios[name] = fuzz.ratio(s["sample"]["*sample_name"], file)
-
+    logging.debug(f" Conflict for {file}, samples: {samples}, ratios{ratios}")
     return max(ratios, key=lambda k: ratios[k])
 
 
@@ -122,65 +153,64 @@ def link_files_to_metadata(db_client: pymongo.MongoClient):
         name = sample["*sample_name"]
         search_result = search(sample, reads)
 
-        if not search_result:
-            continue
-        else:
-            print(f"No files found for sample: '{sample}'")
+        if search_result:
+            matched_sample, used_pref_id, found_files = search_result
 
-        matched_sample, used_pref_id, found_files = search_result
+            if found_files:
+                # print(f"Found files for {name}: {found_files}")
+                matches += 1
+                matched_files += len(found_files)
+                dates = [file["mdate"] for file in found_files][0]
+                filesize_sum = sum([file["filesize"] for file in found_files])
+                files = [file["file_name"] for file in found_files]
 
-        if found_files:
-            matches += 1
-            matched_files += len(found_files)
-            dates = [file["mdate"] for file in found_files]
-            filesize_sum = sum([file["filesize"] for file in found_files])
-            files = [file["file_name"] for file in found_files]
+                if len(found_files) >= 20:
+                    logging.warning(
+                        f"Found abnormal number of files ({len(found_files)}) for sample '{name}'"
+                    )
+                for file in files:
+                    logging.debug(f"Matched {name} with {file}")
+                    match_dict[file].append(
+                        {
+                            "sample": matched_sample,
+                            "pref_id_bool": used_pref_id,
+                        }
+                    )
+                    reads_ops.append(
+                        pymongo.operations.UpdateOne(
+                            filter={"file_name": file},
+                            update={
+                                "$set": {"orphan": False},
+                            },
+                        )
+                    )
 
-            if len(found_files) >= 20:
-                print(
-                    f"WARNING: Found abnormal number of files ({len(found_files)}) for sample '{name}'"
-                )
-            for file in files:
-                match_dict[file].append(
-                    {
-                        "sample": matched_sample,
-                        "pref_id_bool": used_pref_id,
-                    }
-                )
-                reads_ops.append(
+                metadata_ops.append(
                     pymongo.operations.UpdateOne(
-                        filter={"file_name": file},
+                        filter={"*sample_name": name},
                         update={
-                            "$set": {"orphan": False},
+                            "$set": {
+                                "files": files,
+                                "recieved": dates,
+                                "filesize_sum": filesize_sum,
+                            },
                         },
                     )
                 )
-
-            metadata_ops.append(
-                pymongo.operations.UpdateOne(
-                    filter={"*sample_name": name},
-                    update={
-                        "$set": {
-                            "files": files,
-                            "recieved": dates,
-                            "filesize_sum": filesize_sum,
-                        },
-                    },
-                )
-            )
-
+        else:
+            logging.warning(f"No files found for {name}")
     for k, v in match_dict.items():
 
         if len(v) > 1:
             matched_samples = [s["sample"]["*sample_name"] for s in v]
 
-            print(
-                f"WARNING: File: '{k}' has multiple samples associated with it: {matched_samples}"
+            logging.warning(
+                f" File: '{k}' has multiple samples associated with it: {matched_samples}"
             )
             best_match = solve_conflict(k, v)
             matches_to_drop = [i for i in matched_samples if i != best_match]
-            print(
-                f"Pulling file: '{k}' from samples: {matches_to_drop} because '{best_match}' matched the file best."
+            logging.warning(
+                f" Pulling file: '{k}' from samples: {matches_to_drop} because '{best_match}' matched the file best."
             )
             for match in matches_to_drop:
                 metadata_ops.append(
@@ -191,14 +221,14 @@ def link_files_to_metadata(db_client: pymongo.MongoClient):
                 )
 
     if not matched_files:
-        print("Found no matches, exiting.")
+        logging.info(" Found no matches, exiting.")
         return
-    print(f"Matched {matched_files} orphan files with {matches} samples")
+    logging.info(f" Matched {matched_files} orphan files with {matches} samples")
     try:
         metadata.bulk_write(metadata_ops)
         reads_db.bulk_write(reads_ops)
     except BulkWriteError as bwe:
-        print(bwe.details)
+        logging.error(bwe.details)
 
 
 def main():
