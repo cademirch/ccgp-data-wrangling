@@ -14,8 +14,8 @@ import re
 # https://stackoverflow.com/questions/33997361
 def dms2dd(s):
     # example: s = """0°51'56.29"S"""
-    compass = ["N", "S", "E", "W"]
-    if any(d in s.upper() for d in compass):
+    chars = ["°", "'", '"']
+    if any(d in s.upper() for d in chars):
         try:
             degrees, minutes, seconds, direction = re.split("[°'\"]+", s)
             dd = float(degrees) + float(minutes) / 60 + float(seconds) / (60 * 60)
@@ -26,6 +26,9 @@ def dms2dd(s):
             print(f"DMS coordinates malformed: {s}")
             return 0
     else:
+        compass = ["N", "S", "E", "W"]
+        for c in compass:
+            str(s).upper().replace(c, "")
         return s
 
 
