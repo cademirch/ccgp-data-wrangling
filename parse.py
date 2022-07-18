@@ -15,7 +15,8 @@ import re
 def dms2dd(s):
     # example: s = """0°51'56.29"S"""
     chars = ["°", "'", '"']
-    if any(d in s.upper() for d in chars):
+    s = str(s)
+    if any(d in s for d in chars):
         try:
             degrees, minutes, seconds, direction = re.split("[°'\"]+", s)
             dd = float(degrees) + float(minutes) / 60 + float(seconds) / (60 * 60)
@@ -32,13 +33,35 @@ def dms2dd(s):
         return s
 
 
+def check_lat(lat):
+    lat = float(lat)
+    if lat == 0.0:
+        return 0.0
+    else:
+        if lat > 0:
+            return lat
+        else:
+            return lat * -1
+
+
+def check_long(long):
+    long = float(long)
+    if long == 0.0:
+        return 0.0
+    else:
+        if long < 0:
+            return long
+        else:
+            return long * -1
+
+
 def get_project_id(series: pd.Series) -> dict[str:str]:
     """Takes series of species and looks up what project-id it belongs to and returns that id"""
 
     def create_dict() -> dict:
         project_ids = defaultdict(str)
         genuses = defaultdict(str)
-        with open("project_ids_species.csv", "r") as f:
+        with open("/home/ubuntu/ccgp-data-wrangling/project_ids_species.csv", "r") as f:
             next(f)
             for line in f:
                 line = line.strip().split(",")
@@ -48,6 +71,7 @@ def get_project_id(series: pd.Series) -> dict[str:str]:
         return project_ids, genuses
 
     series = series.dropna()
+
     spp_lookup, genus_lookup = create_dict()
     out = [[], []]
     for s in series:
@@ -181,6 +205,11 @@ def read_non_minicore(file: Path) -> pd.DataFrame:
             df = df.drop(columns=["lat_lon"])
         else:
             df["lat_lon"] = (
+                df["lat_lon"]
+                .astype(str)
+                .replace("Not determined(.*)", np.nan, regex=True)
+            )
+            df["lat_lon"] = (
                 df["lat_lon"].fillna("0,0").astype(str).replace("_", ",", regex=True)
             )
             # print(df["lat_lon"])
@@ -207,7 +236,8 @@ def finalize_df(df: pd.DataFrame) -> pd.DataFrame:
     df["*sample_name"] = df["*sample_name"].str.replace(".", "_")
     # Same for spaces but underscores instead
     df["*sample_name"] = df["*sample_name"].str.replace(" ", "_")
-
+    df["lat"] = df["lat"].apply(check_lat)
+    df["long"] = df["long"].apply(check_long)
     if "Preferred Sequence ID" in df.columns:
         df["Preferred Sequence ID"] = df["Preferred Sequence ID"].astype(str)
         df["Preferred Sequence ID"] = df["Preferred Sequence ID"].str.replace(".", "_")
