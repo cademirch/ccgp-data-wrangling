@@ -83,6 +83,7 @@ class CCGPDrive:
     ) -> None:
         if folder_name is not None and folder_id is None:
             folder_id = self.get_folder_id(folder_name)
+            file_metadata = {"name": file.name, "parents": [folder_id]}
             if folder_id == False:
                 folder_id = self.create_folder(folder_name)
                 file_metadata = {"name": file.name, "parents": [folder_id]}
