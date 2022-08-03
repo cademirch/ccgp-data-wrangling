@@ -147,21 +147,21 @@ def add_biosample_accessions(
                 )
             )
             print(f"Added {record['accession']} to {record['sample_name']}")
-        project_id = collection.find_one(
-            filter={"*sample_name": record["sample_name"]}
-        )["ccgp-project-id"]
+            project_id = collection.find_one(
+                filter={"*sample_name": record["sample_name"]}
+            )["ccgp-project-id"]
 
-        ccgp_workflow_progress.update_one(
-            filter={"project_id": project_id},
-            update={
-                "$set": {
-                    "biosamples_created": datetime.fromtimestamp(
-                        os.path.getmtime(file_name)
-                    )
-                }
-            },
-            upsert=True,
-        )
+            ccgp_workflow_progress.update_one(
+                filter={"project_id": project_id},
+                update={
+                    "$set": {
+                        "biosamples_created": datetime.fromtimestamp(
+                            os.path.getmtime(file_name)
+                        )
+                    }
+                },
+                upsert=True,
+            )
 
     try:
         collection.bulk_write(operations)
