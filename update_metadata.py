@@ -155,6 +155,7 @@ def add_biosample_accessions(
         pprint(bwe.details)
 
     for file in to_process:
+        file = Path(file["name"])
         parsed_attribute_files.update_one(
             filter={"file_name": file["name"]},
             update={"$set": {"file_name": file["name"]}},
