@@ -127,12 +127,11 @@ def add_biosample_accessions(
         print("Nothing to be done.")
         return
 
-    drive.download_files(to_process)
-
-    to_process = [Path(item["name"]) for item in to_process]
-    for tsv_file in to_process:
-        print(tsv_file)
-        df = pd.read_csv(tsv_file, sep="\t", header=0)
+    for file in to_process:
+        file_name = file["name"]
+        drive.download_files(file)
+        print(file_name)
+        df = pd.read_csv(file_name, sep="\t", header=0)
         operations = []
         for _, row in df.iterrows():
             record = row.to_dict()
@@ -157,7 +156,7 @@ def add_biosample_accessions(
             update={
                 "$set": {
                     "biosamples_created": datetime.fromtimestamp(
-                        os.path.getmtime(tsv_file)
+                        os.path.getmtime(file_name)
                     )
                 }
             },
