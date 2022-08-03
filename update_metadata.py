@@ -126,13 +126,13 @@ def add_biosample_accessions(
     if not to_process:
         print("Nothing to be done.")
         return
-
+    operations = []
     for file in to_process:
         file_name = file["name"]
         drive.download_files(file)
         print(file_name)
         df = pd.read_csv(file_name, sep="\t", header=0)
-        operations = []
+        
         for _, row in df.iterrows():
             record = row.to_dict()
             operations.append(
