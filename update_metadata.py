@@ -111,10 +111,10 @@ def add_biosample_accessions(
     db_client: pymongo.MongoClient,
 ) -> None:
     """Reads attributes.tsv from BioSample submission to add biosample accessions to samples in database"""
-    db = db_client["ccgp"]
-    collection = db["ccgp-samples"]
-    ccgp_workflow_progress = db["ccgp_workflow_progress"]
-    parsed_attribute_files = db["parsed_attribute_files"]
+    db = db_client["ccgp_dev"]
+    collection = db["sample_metadata"]
+    parsed_metadatas = db["parsed_metadata_files"]
+    ccgp_workflow_progress = db["workflow_progress"]
 
     already_read = [doc.get("file_name") for doc in parsed_attribute_files.find({})]
     drive = CCGPDrive()
@@ -156,7 +156,7 @@ def add_biosample_accessions(
 
     for file in to_process:
         file = Path(file["name"])
-        parsed_attribute_files.update_one(
+        parsed_metadatas.update_one(
             filter={"file_name": file["name"]},
             update={"$set": {"file_name": file["name"]}},
             upsert=True,
