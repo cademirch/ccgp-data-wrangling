@@ -157,8 +157,8 @@ def add_biosample_accessions(
     for file in to_process:
         file = Path(file["name"])
         parsed_metadatas.update_one(
-            filter={"file_name": file["name"]},
-            update={"$set": {"file_name": file["name"]}},
+            filter={"file_name": file.name},
+            update={"$set": {"file_name": file.name}},
             upsert=True,
         )
         file.unlink()
