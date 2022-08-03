@@ -116,7 +116,7 @@ def add_biosample_accessions(
     parsed_metadatas = db["parsed_metadata_files"]
     ccgp_workflow_progress = db["workflow_progress"]
 
-    already_read = [doc.get("file_name") for doc in parsed_attribute_files.find({})]
+    already_read = [doc.get("file_name") for doc in parsed_metadatas.find({})]
     drive = CCGPDrive()
     to_process = [
         item
