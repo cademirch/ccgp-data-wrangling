@@ -206,13 +206,14 @@ def main():
 
     args = parser.parse_args()
 
-    if args.force:
-        force = True
-
-    else:
-        force = False
+    
 
     if args.command == "metadata":
+        if args.force:
+            force = True
+
+        else:
+            force = False
 
         update_metadata(db, force, args.file)
     elif args.command == "attributes":
