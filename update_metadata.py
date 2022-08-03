@@ -137,7 +137,7 @@ def add_biosample_accessions(
             record = row.to_dict()
             operations.append(
                 pymongo.operations.UpdateOne(
-                    filter={"*sample_name": record["sample_name"]},
+                    filter={"*sample_name": record["sample_name"].replace(" ", "_").replace(".", "_")},
                     update={
                         "$set": {
                             "biosample_accession": record["accession"],
