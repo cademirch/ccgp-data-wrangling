@@ -1,0 +1,2 @@
+cmd: lftp -c 'set ssl:verify-certificate no set ftp:ssl-protect-data true set ftp:ssl-force true; open -u i220701_150PE_NVS1B_S4_Smith_M002088,kaizooM0peid5le -e "mirror -c; quit" ftp://gslanalyzer.qb3.berkeley.edu:990'
+name: example 

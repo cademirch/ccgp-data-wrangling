@@ -17,11 +17,11 @@ class WGSTracking:
         )
         self.sh = gc.open("WGSTracking")
 
-    def _get_column_as_series(self, column: str) -> pd.Series:
+    def _get_column_as_series(self, column: str, index="SpeciesProjectID") -> pd.Series:
         self.df.replace(
             r"^\s*$", np.nan, regex=True, inplace=True
         )  # Replace whitespace with nans to then remove them
-        self.df.set_index("SpeciesProjectID", inplace=True)
+        self.df.set_index(index, inplace=True)
         series = self.df[column]
         series = series.dropna()
         return series
@@ -36,6 +36,12 @@ class WGSTracking:
         wks = self.sh.worksheet_by_title("ExpectedWGSbySpeciesProject")
         self.df = wks.get_as_df()
         series = self._get_column_as_series("sample number of species project")
+        return series
+
+    def project_type(self) -> pd.Series:
+        wks = self.sh.worksheet_by_title("CCGPSpeciesSubspeciesList")
+        self.df = wks.get_as_df()
+        series = self._get_column_as_series("Map group", index="Species-project")
         return series
 
     def reference_accession(self, project_id: str) -> pd.Series:
