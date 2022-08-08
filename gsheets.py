@@ -41,7 +41,7 @@ class WGSTracking:
     def project_type(self) -> pd.Series:
         wks = self.sh.worksheet_by_title("CCGPSpeciesSubspeciesList")
         self.df = wks.get_as_df()
-        series = self._get_column_as_series("Map group", index="Species-project")
+        series = self._get_column_as_series("NCBI Template", index="Species-project")
         return series
 
     def reference_accession(self, project_id: str) -> pd.Series:

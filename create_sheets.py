@@ -14,6 +14,7 @@ from datetime import datetime
 import argparse
 from itertools import chain
 from gsheets import WGSTracking
+from gdrive import CCGPDrive
 
 
 def preprocess_dataframe(df: pd.DataFrame) -> pd.DataFrame:
@@ -153,8 +154,10 @@ def create_sra_sheet(project_id: str, db_client: pymongo.MongoClient) -> None:
     ]
     sra_df = sra_df[sra_cols]
     filename = f"{project_id}_sra.tsv"
-    filepath = os.path.join("..", "sra_sheets", filename)
-    sra_df.to_csv(filename, index=False, sep="\t")
+    filepath = Path("sra_sheets", filename)
+    sra_df.to_csv(filepath, index=False, sep="\t")
+    drive = CCGPDrive()
+    drive.upload_file(filepath, folder_name="SRA Submission Sheets")
     ccgp_workflow_progress.update_one(
         filter={"project_id": project_id},
         update={"$set": {"sra_sheet_created": datetime.utcnow()}},
@@ -184,7 +187,7 @@ def create_biosample_sheet(project_id: str, db_client: pymongo.MongoClient) -> N
         + "_"
         + df["*sample_name"]
     )  # to avoid the issue where ncbi complains about non-unique records.
-
+    df["bioproject_accession"] = ""
     plant_cols = [
         "*sample_name",
         "sample_title",
@@ -291,30 +294,21 @@ def create_biosample_sheet(project_id: str, db_client: pymongo.MongoClient) -> N
         "description",
         "library_prep_method",
     ]
-
+    file_path = Path("biosample_sheets", f"{project_id}_biosample.tsv")
     if taxon_group == "Vertebrate":
         df = df[df.columns.intersection(animals_cols)]
-        df.to_csv(
-            Path("biosample_sheets", f"{project_id}_biosample.tsv"),
-            index=False,
-            sep="\t",
-        )
+        df.to_csv(file_path, index=False, sep="\t")
     elif taxon_group == "Invertebrate":
         df = df[df.columns.intersection(invert_cols)]
-        df.to_csv(
-            Path("biosample_sheets", f"{project_id}_biosample.tsv"),
-            index=False,
-            sep="\t",
-        )
+        df.to_csv(file_path, index=False, sep="\t")
     elif taxon_group == "Plant":
         df = df[df.columns.intersection(plant_cols)]
-        df.to_csv(
-            Path("biosample_sheets", f"{project_id}_biosample.tsv"),
-            index=False,
-            sep="\t",
-        )
+        df.to_csv(file_path, index=False, sep="\t")
     else:
         raise ValueError(f"Unexpected taxon group: {taxon_group}")
+
+    drive = CCGPDrive()
+    drive.upload_file(file_path, folder_name="BioSample Submission Sheets")
 
 
 def main():

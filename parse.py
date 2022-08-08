@@ -18,11 +18,19 @@ def dms2dd(s):
     s = str(s)
     if any(d in s for d in chars):
         try:
-            degrees, minutes, seconds, direction = re.split("[°'\"]+", s)
-            dd = float(degrees) + float(minutes) / 60 + float(seconds) / (60 * 60)
-            if direction in ("S", "W"):
-                dd *= -1
-            return dd
+            split_string = re.split("[°'\"]+", s)
+            if len(split_string) == 4:
+                degrees, minutes, seconds, direction = split_string
+                dd = float(degrees) + float(minutes) / 60 + float(seconds) / (60 * 60)
+                if direction in ("S", "W"):
+                    dd *= -1
+                return dd
+            elif len(split_string) == 3:
+                degrees, minutes, direction = split_string
+                dd = float(degrees) + float(minutes) / (60)
+                if direction in ("S", "W"):
+                    dd *= -1
+                return dd
         except ValueError:
             print(f"DMS coordinates malformed: {s}")
             return 0
@@ -31,6 +39,20 @@ def dms2dd(s):
         for c in compass:
             str(s).upper().replace(c, "")
         return s
+
+
+def check_date(date):
+    if len(str(date).split(",")) == 2:
+        # probably gave two years
+        split_date = str(date).split(",")
+        return "/".join(split_date)
+    if len(str(date).split("/")) == 3:
+        split_date = str(date).split("/")
+        year = split_date[2]
+        day = split_date[1].zfill(2)
+        month = split_date[0].zfill(2)
+        return f"{year}-{month}-{day}"
+    return date
 
 
 def check_lat(lat):
@@ -61,7 +83,7 @@ def get_project_id(series: pd.Series) -> dict[str:str]:
     def create_dict() -> dict:
         project_ids = defaultdict(str)
         genuses = defaultdict(str)
-        with open("/home/ubuntu/ccgp-data-wrangling/project_ids_species.csv", "r") as f:
+        with open("project_ids_species.csv", "r") as f:
             next(f)
             for line in f:
                 line = line.strip().split(",")
@@ -154,7 +176,7 @@ def read_minicore_sheet(file: Path) -> pd.DataFrame:
         "gDNA extraction method*",
         "long",
         "lat",
-        "sample collection date*",
+        "collection_date*",
         "geo_loc_name",
         "Locality Description",
         "library_prep_method",
@@ -186,10 +208,7 @@ def read_non_minicore(file: Path) -> pd.DataFrame:
 
     elif file.suffix in [".tsv"]:
         df = pd.read_csv(
-            file,
-            header=find_header_line_num(file),
-            sep="\t",
-            encoding_errors="ignore",
+            file, header=find_header_line_num(file), sep="\t", encoding_errors="ignore"
         )
 
     df.dropna(how="all", inplace=True)
@@ -215,9 +234,7 @@ def read_non_minicore(file: Path) -> pd.DataFrame:
             # print(df["lat_lon"])
             df["lat"] = df["lat_lon"].apply(lambda x: x.split(",")[0])
             df["long"] = df["lat_lon"].apply(lambda x: x.split(",")[1])
-            df = df.drop(
-                columns=["lat_lon"],
-            )
+            df = df.drop(columns=["lat_lon"])
     df["lat"] = df["lat"].apply(dms2dd)
     df["long"] = df["long"].apply(dms2dd)
 
@@ -238,6 +255,7 @@ def finalize_df(df: pd.DataFrame) -> pd.DataFrame:
     df["*sample_name"] = df["*sample_name"].str.replace(" ", "_")
     df["lat"] = df["lat"].apply(check_lat)
     df["long"] = df["long"].apply(check_long)
+    df["*collection_date"] = df["*collection_date"].apply(check_date)
     if "Preferred Sequence ID" in df.columns:
         df["Preferred Sequence ID"] = df["Preferred Sequence ID"].astype(str)
         df["Preferred Sequence ID"] = df["Preferred Sequence ID"].str.replace(".", "_")
