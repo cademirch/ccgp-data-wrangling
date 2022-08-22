@@ -64,7 +64,7 @@ def preprocess_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     return out_df
 
 
-def create_workflow_sheet(project_id: str, db_client: pymongo.MongoClient) -> None:
+def create_workflow_sheet(project_id: str, db_client: pymongo.MongoClient, out_path=None) -> None:
     """Creates workflow csv for given project_id. If project does not have ref genome accession, a placeholder will be printed."""
     db = db_client["ccgp_dev"]
     ccgp_samples = db["sample_metadata"]
@@ -112,8 +112,11 @@ def create_workflow_sheet(project_id: str, db_client: pymongo.MongoClient) -> No
     workflow_df["BioProject"] = workflow_df["Organism"]
     workflow_df = workflow_df.drop_duplicates()
     filename = f"{project_id}_workflow.csv"
-
-    workflow_df.to_csv(filename, index=False)
+    if out_path is not None:
+        file_path = Path(out_path, filename)
+    else:
+        file_path = Path(filename)
+    workflow_df.to_csv(file_path, index=False)
     ccgp_workflow_progress.update_one(
         filter={"project_id": project_id},
         update={"$set": {"workflow_sheet_created": datetime.utcnow()}},
