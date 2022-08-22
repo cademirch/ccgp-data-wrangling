@@ -10,3 +10,9 @@ workflows/FastQ_Screen_Genomes
 workflows/logs*
 .env
 google_secret.json
+workflows/configs/*
+sra_sheets/
+workflow_sheets/
+*.xlsx
+*.xls
+biosample_sheets/

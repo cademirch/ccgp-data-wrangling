@@ -28,7 +28,7 @@ class CCGPDrive:
                 .list(
                     q=query,
                     spaces="drive",
-                    fields="nextPageToken, files(id, name, modifiedTime)",
+                    fields="nextPageToken, files(id, name, modifiedTime, mimeType)",
                     pageToken=page_token,
                 )
                 .execute()
@@ -70,7 +70,13 @@ class CCGPDrive:
                     + " already exists, skipping download."
                 )
                 continue
-            request = self.service.files().get_media(fileId=file.get("id"))
+            if file.get("mimeType") == "application/vnd.google-apps.spreadsheet":
+                request = self.service.files().export_media(
+                    fileId=file.get("id"), mimeType="text/tab-separated-values"
+                )
+                file["name"]
+            else:
+                request = self.service.files().get_media(fileId=file.get("id"))
             fh = io.FileIO(file.get("name"), "wb")
             downloader = MediaIoBaseDownload(fh, request)
             done = False

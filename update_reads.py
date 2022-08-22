@@ -2,7 +2,7 @@ import boto3
 import pymongo
 from dotenv import load_dotenv
 from os import getenv
-from db import get_mongo_client
+from utils.db import get_mongo_client
 from pymongo.errors import BulkWriteError
 from pprint import pprint
 from collections import defaultdict

@@ -10,6 +10,34 @@ from collections import defaultdict
 from gsheets import WGSTracking
 import numpy as np
 import re
+import string
+
+
+def split_lat(s):
+    if not isinstance(s, str):
+        return s
+    s = "".join(x for x in s if x not in string.ascii_letters)
+    if len(s.split(",")) == 2:  # Case: s="32.11,128.11"
+        return s.split(",")[0]
+    elif len(s.split(" ")) == 4:  # Case: s="38.05104 N 120.62301 W"
+        return s.split(" ")[0]
+    elif len(s.split("_")) == 2:
+        return s.split("_")[0]
+    print(s)
+
+
+def split_long(s):
+    if not isinstance(s, str):
+        return s
+    s = "".join(x for x in s if x not in string.ascii_letters)
+    if len(s.split(",")) == 2:  # Case: s="32.11,128.11"
+        return s.split(",")[1]
+    elif len(s.split(" ")) == 4:  # Case: s="38.05104 N 120.62301 W"
+        return s.split(" ")[2]
+    elif len(s.split("_")) == 2:
+        return s.split("_")[1]
+    print(s)
+
 
 # https://stackoverflow.com/questions/33997361
 def dms2dd(s):
@@ -123,19 +151,11 @@ def find_header_line_num(file: Path) -> int:
     raise (ValueError(f"Could not find header in {file}"))
 
 
-def read_sheet(file: Path) -> pd.DataFrame:
+def read_sheet(file: Path, project_type: str) -> pd.DataFrame:
 
-    if file.suffix in [".xlsx", ".xls"]:
-        df = pd.read_excel(file, nrows=20)
-        if all(
-            x in df.columns
-            for x in ["SampleID*", "Preferred Sequence ID", "Genus species*"]
-        ):  # Minicore template should have these columns. Non-minicore has different column names and should have ~12 rows of comments b4 header.
-            df = read_minicore_sheet(file)
-        else:
-            df = read_non_minicore(file)
-
-    elif file.suffix in [".tsv"]:
+    if project_type == "minicore":
+        df = read_minicore_sheet(file)
+    else:
         df = read_non_minicore(file)
 
     return df
@@ -204,9 +224,13 @@ def read_non_minicore(file: Path) -> pd.DataFrame:
 
     w = WGSTracking()
     if file.suffix in [".xlsx", ".xls"]:
-        df = pd.read_excel(file, header=12)
+        i = 0
+        df = pd.read_excel(file, header=i)
+        while "*sample_name" not in df.columns:
+            df = pd.read_excel(file, header=i)
+            i += 1
 
-    elif file.suffix in [".tsv"]:
+    elif file.suffix in [".tsv", ""]:
         df = pd.read_csv(
             file, header=find_header_line_num(file), sep="\t", encoding_errors="ignore"
         )
@@ -228,12 +252,12 @@ def read_non_minicore(file: Path) -> pd.DataFrame:
                 .astype(str)
                 .replace("Not determined(.*)", np.nan, regex=True)
             )
-            df["lat_lon"] = (
-                df["lat_lon"].fillna("0,0").astype(str).replace("_", ",", regex=True)
-            )
+            # df["lat_lon"] = (
+            #     df["lat_lon"].fillna("0,0").astype(str).replace("_", ",", regex=True)  # This is dumb actually.
+            # )
             # print(df["lat_lon"])
-            df["lat"] = df["lat_lon"].apply(lambda x: x.split(",")[0])
-            df["long"] = df["lat_lon"].apply(lambda x: x.split(",")[1])
+            df["lat"] = df["lat_lon"].apply(split_lat)
+            df["long"] = df["lat_lon"].apply(split_long)
             df = df.drop(columns=["lat_lon"])
     df["lat"] = df["lat"].apply(dms2dd)
     df["long"] = df["long"].apply(dms2dd)
@@ -255,7 +279,10 @@ def finalize_df(df: pd.DataFrame) -> pd.DataFrame:
     df["*sample_name"] = df["*sample_name"].str.replace(" ", "_")
     df["lat"] = df["lat"].apply(check_lat)
     df["long"] = df["long"].apply(check_long)
-    df["*collection_date"] = df["*collection_date"].apply(check_date)
+    if "collection_date" in df.columns:
+        df["collection_date"] = df["collection_date"].apply(check_date)
+    if "collection_date*" in df.columns:
+        df["collection_date*"] = df["collection_date*"].apply(check_date)
     if "Preferred Sequence ID" in df.columns:
         df["Preferred Sequence ID"] = df["Preferred Sequence ID"].astype(str)
         df["Preferred Sequence ID"] = df["Preferred Sequence ID"].str.replace(".", "_")

@@ -1,3 +1,4 @@
+openpyxl
 aioeasywebdav
 amply
 backports.functools-lru-cache

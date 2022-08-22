@@ -1,7 +1,7 @@
 import os
 from sre_constants import SRE_FLAG_DOTALL
 from typing_extensions import assert_type
-from db import get_mongo_client
+from utils.db import get_mongo_client
 import pymongo
 import datetime
 from pprint import pprint
@@ -13,8 +13,8 @@ from pathlib import Path
 from datetime import datetime
 import argparse
 from itertools import chain
-from gsheets import WGSTracking
-from gdrive import CCGPDrive
+from utils.gsheets import WGSTracking
+from utils.gdrive import CCGPDrive
 
 
 def preprocess_dataframe(df: pd.DataFrame) -> pd.DataFrame:

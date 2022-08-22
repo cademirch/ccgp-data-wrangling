@@ -1,6 +1,6 @@
-from db import get_mongo_client
+from utils.db import get_mongo_client
 import pymongo
-import parse
+import utils.parse
 from pymongo.errors import BulkWriteError
 from pprint import pprint
 from datetime import datetime
@@ -8,7 +8,7 @@ from pathlib import Path
 import pandas as pd
 import os
 import argparse
-from gdrive import CCGPDrive
+from utils.gdrive import CCGPDrive
 import sys
 from collections import defaultdict
 import traceback
@@ -38,6 +38,9 @@ def update_metadata(db_client: pymongo.MongoClient, force=False, file: str = Non
         for item in drive.list_files_from_folder("Minicore Submissions")
         if item["name"] not in already_read
     ]
+
+    non_minicore_files = [(f, "non_minicore") for f in non_minicore_files]
+    minicore_files = [(f, "minicore") for f in minicore_files]
     files = non_minicore_files + minicore_files
     if not files:
         print("Nothing to be done.")
@@ -49,11 +52,13 @@ def update_metadata(db_client: pymongo.MongoClient, force=False, file: str = Non
     parsed_ops = []
     project_ids = defaultdict(int)
     try:
-        for file in files:
+        for file, project_type in files:
             file_name = file["name"]
+            print(file)
             drive.download_files(file)
+
             print("Processing file: " + "'" + file_name + "'")
-            df = parse.finalize_df(parse.read_sheet(Path(file_name)))
+            df = parse.finalize_df(parse.read_sheet(Path(file_name), project_type))
             print(f"Got a DataFrame of this shape: {df.shape}")
             # Replace NaNs with empty string b/c JSON for web dashboard cannot encode NaN
             # df = df.fillna("")
@@ -107,9 +112,7 @@ def update_metadata(db_client: pymongo.MongoClient, force=False, file: str = Non
         pprint(bwe.details)
 
 
-def add_biosample_accessions(
-    db_client: pymongo.MongoClient,
-) -> None:
+def add_biosample_accessions(db_client: pymongo.MongoClient,) -> None:
     """Reads attributes.tsv from BioSample submission to add biosample accessions to samples in database"""
     db = db_client["ccgp_dev"]
     collection = db["sample_metadata"]
@@ -132,22 +135,21 @@ def add_biosample_accessions(
         drive.download_files(file)
         print(file_name)
         df = pd.read_csv(file_name, sep="\t", header=0)
-        
+
         for _, row in df.iterrows():
             record = row.to_dict()
             operations.append(
                 pymongo.operations.UpdateOne(
-                    filter={"*sample_name": record["sample_name"].replace(" ", "_").replace(".", "_")},
-                    update={
-                        "$set": {
-                            "biosample_accession": record["accession"],
-                        }
+                    filter={
+                        "*sample_name": record["sample_name"]
+                        .replace(" ", "_")
+                        .replace(".", "_")
                     },
+                    update={"$set": {"biosample_accession": record["accession"]}},
                     upsert=False,
                 )
             )
             print(f"Added {record['accession']} to {record['sample_name']}")
-            
 
     try:
         collection.bulk_write(operations)
@@ -180,10 +182,7 @@ def main():
         help="Force rerun all sheets",
     )
     metadata.add_argument(
-        dest="file",
-        nargs="?",
-        default=None,
-        help="Run this specific file",
+        dest="file", nargs="?", default=None, help="Run this specific file"
     )
     attributes = subparser.add_parser(
         "attributes", description="Update biosample accessions"
@@ -191,8 +190,6 @@ def main():
     both = subparser.add_parser("both", description="Update both")
 
     args = parser.parse_args()
-
-    
 
     if args.command == "metadata":
         if args.force:
