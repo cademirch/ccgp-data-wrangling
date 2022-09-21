@@ -51,3 +51,11 @@ Sometimes submitters sequenced outside of QB3. Regardless the workflow should st
   ```
 4. Setup the config file like above. You must put a value for `cmd` but it can be anything.
 5. Run the workflow in a screen like above.
+
+
+# Running the transfer reads workflow:
+1. Check that the project you are transferring has the expected number of reads/samples before running.
+2. Execute the workflow:
+  ```
+  snakemake -s transfer_reads.smk --config pid='<project-id>' --nolock --use-conda --cores 10
+  ```
