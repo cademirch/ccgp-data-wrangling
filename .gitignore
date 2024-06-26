@@ -1,4 +1,4 @@
-scripts/google_secret.json
+scripts/*
 *.gz
 *.pyc
 scripts/.env
@@ -16,3 +16,14 @@ workflow_sheets/
 *.xlsx
 *.xls
 biosample_sheets/
+biosample_sheets_NEW/*
+biosample_sheets_extra/*
+sra_sheets_NEW/*
+sra_sheets_extra/*
+non_minicore_intake_metadata/*
+Misc_Scripts/AWS_download/*
+Misc_Scripts/Sum_files/*
+Misc_Scripts/Mongo_Stuff/Mongo_Backups_sample_metadata/*
+Misc_Scripts/Mongo_Stuff/Mongo_Backups_reads/*
+Misc_Scripts/Mongo_Stuff/back_up_mongo_reads.sh
+Misc_Scripts/Mongo_Stuff/back_up_mongo_sm.sh

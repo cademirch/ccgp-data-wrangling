@@ -1,6 +1,7 @@
 import boto3
 import pymongo
 from dotenv import load_dotenv
+import os
 from os import getenv
 from utils.db import get_mongo_client
 from pymongo.errors import BulkWriteError
@@ -15,12 +16,15 @@ import logging
 import numpy as np
 import sys
 import math
+import argparse
 
-#DOESN'T OVERRIDE EXISTING FILES! 
+'''
+python3 update_reads_by_lane.py --lane-name LANE_NAME
+'''
 
 logging.basicConfig(format="%(levelname)s:%(message)s", level=logging.INFO)
 
-# Change CCGP-project on line 182.
+
 def list_s3_bucket_objs():
     """Returns s3 objectCollection"""
     load_dotenv()
@@ -49,6 +53,7 @@ def update_db_all(db_client: pymongo.MongoClient, files):
                     "$setOnInsert": {
                         "filesize": file.size,
                         "mdate": file.last_modified,
+                        "instrument_model": "Illumina NovaSeq X",
                     }
                 },  # Since upsert is true, we dont need to set file_name explicitly.
                 upsert=True,
@@ -70,28 +75,35 @@ def search(sample: dict, files: list[dict]):
 
     def find_files(q: str) -> list[dict]:
         q = str(q)
-
+  
         if q is None or q.lower() == "nan":
+
             return False
         
-        ### NEW - Handles minicore seq's separated by a comma. ###
-        minicore_ids = q.split(',')
-        found_files = []
-
-        for minicore_id in minicore_ids:
+        found = [
+            file
+            for file in files
+            if f"{q}_" in file["file_name"]
+            or f"{q}-" in file["file_name"]
+            or f"{q}." in file["file_name"]
+        ]
+        if found:
+            return found
+        elif "_" in q:
+            
+            q = q.replace("_", "-")
             found = [
                 file
                 for file in files
-                if f"{minicore_id}_" in file["file_name"]
-                or f"{minicore_id}-" in file["file_name"]
-                or f"{minicore_id}." in file["file_name"]
+                if f"{q}_" in file["file_name"]
+                or f"{q}-" in file["file_name"]
+                or f"{q}." in file["file_name"]
             ]
-            found_files.extend(found)
-            if found_files:
-                return found_files
-            elif "_" in minicore_id:
+            if found:
+                return found
+            else:
+                q = q.replace("-", "")
                 
-                q = minicore_id.replace("_", "-")
                 found = [
                     file
                     for file in files
@@ -99,43 +111,23 @@ def search(sample: dict, files: list[dict]):
                     or f"{q}-" in file["file_name"]
                     or f"{q}." in file["file_name"]
                 ]
-                found_files.extend(found)
-                if found_files:
-                    return found_files
-                else:
-                    q = minicore_id.replace("-", "")
-                    
-                    found = [
-                        file
-                        for file in files
-                        if f"{q}_" in file["file_name"]
-                        or f"{q}-" in file["file_name"]
-                        or f"{q}." in file["file_name"]
-                    ]
-                    found_files.extend(found)
-                    if found_files:
-                        return found_files
-            elif "-" in minicore_id:
-                q = minicore_id.replace("-", "_")
-                found = [
-                    file
-                    for file in files
-                    if f"{q}" in file["file_name"]
-                    or f"{q}-" in file["file_name"]
-                    or f"{q}." in file["file_name"]
-                ]
-                found_files.extend(found)
-                if found_files:
-                    return found_files
-            return False
-
-####################################################
-# CHANGE THE BELOW 3 VARIABLES TO CHANGE QUERY KEY #
-####################################################
+                if found:
+                    return found
+        elif "-" in q:
+            q = q.replace("-", "_")
+            found = [
+                file
+                for file in files
+                if f"{q}" in file["file_name"]
+                or f"{q}-" in file["file_name"]
+                or f"{q}." in file["file_name"]
+            ]
+            if found:
+                return found
+        return False
 
     pref_id = sample.get("Preferred Sequence ID")
     minicore_id = sample.get("minicore_seq_id")
-    old_minicore_id = sample.get("old_minicore_seq_id")
     name = sample.get("*sample_name")
     found_files = False
     # print(minicore_id)
@@ -181,25 +173,39 @@ def solve_conflict(file: str, samples: list[dict[dict]]) -> str:
     return max(ratios, key=lambda k: ratios[k])
 
 
-def link_files_to_metadata(db_client: pymongo.MongoClient):
+def link_files_to_metadata(db_client: pymongo.MongoClient, lane_name: str):
     """Links fastq files to sample names in samples db."""
 
+    output_folder = "Update_Reads_Logs"
+    os.makedirs(output_folder, exist_ok=True)  # make sure output folder exists.
+    output_file = f"{lane_name}_UpReads_Log.txt"
+    output_path = os.path.join(output_folder, output_file)
+
+    log_file = open(output_path, "w")
+
+    print(lane_name)
     db = db_client["ccgp_dev"]
     metadata = db["sample_metadata"]
     reads_db = db["reads"]
+    
+    query = {"lane_name": {"$regex": f".*{lane_name}.*"}}
+
     metadata.update_many(
     {"files": {"$in": ["", "NaN"]}},
     {"$pull": {"files": {"$in": ["", "NaN"]}}}
     )
-    #sample_names = list(metadata.find({}))  # Get all samples regardless if it has files b/c they might want new files
+    sample_names = list(
+        metadata.find(query)
+    )  # Get all samples regardless if it has files b/c they might want new files
     #THIS IS THE PLACE TO DO SPECIFIC SAMPLES
-
-    sample_names = list(metadata.find({"ccgp-project-id": "93-Brachycybe"})) 
-    #sample_names = list(metadata.find({"*sample_name": "811"})) 
+    #sample_names = list(
+        #metadata.find({"*sample_name":"CC131_SelS"})
+    #)
     
     reads = list(reads_db.find({}))
-    print(f"Found {len(reads)} reads.")
-    print(f"Found {len(sample_names)} samples.")
+    log_file.write(f"Found {len(reads)} reads.")
+    log_file.write(f"Found {len(sample_names)} samples.\n")
+    log_file.write('\n')
     metadata_ops = []
     reads_ops = []
     matches = 0
@@ -209,7 +215,8 @@ def link_files_to_metadata(db_client: pymongo.MongoClient):
     for sample in sample_names:
         # print(sample)
         name = sample["*sample_name"]
-        print(f"Searching for {name}")
+        log_file.write(f"Searching for {name}\n")
+
         
         
         mc_seq= sample.get("minicore_sequenced")
@@ -218,9 +225,12 @@ def link_files_to_metadata(db_client: pymongo.MongoClient):
         elif mc_seq == "NO":
             mc_seq = None
         
+        
         if mc_seq is None or math.isnan(mc_seq):
-            print(f"sample: {name} not sequenced, skipping")
+            log_file.write(f"sample: {name} not sequenced, skipping.\n")
+            log_file.write('\n')
             continue
+
         found_files = []
         search_result = search(sample, reads)
 
@@ -228,7 +238,8 @@ def link_files_to_metadata(db_client: pymongo.MongoClient):
             matched_sample, used_pref_id, found_files = search_result
 
             
-            print("Found files:", found_files)
+            log_file.write(f"Found files: {found_files}\n")
+            log_file.write('\n')
 
         if found_files:
             #print(f"Found files for {name}: {found_files}")
@@ -249,6 +260,8 @@ def link_files_to_metadata(db_client: pymongo.MongoClient):
                 logging.warning(
                     f"Found abnormal number of files ({len(found_files)}) for sample '{name}'"
                 )
+                log_file.write(f"Found abnormal number of files ({len(found_files)}) for sample '{name}'\n")
+                log_file.write('\n')
 
 
 ### NEW CODE TO TEST -- Doesnt append duplicate files to MongoDB ###
@@ -274,6 +287,8 @@ def link_files_to_metadata(db_client: pymongo.MongoClient):
             
             for file in new_files_to_add:
                 logging.debug(f"Matched {name} with {file}")
+                log_file.write(f"Matched {name} with {file}\n")
+                #log_file.write('\n')
                 reads_ops.append(
                     pymongo.operations.UpdateOne(
                         filter={"file_name": file},
@@ -283,59 +298,8 @@ def link_files_to_metadata(db_client: pymongo.MongoClient):
                     )
                 )
         else:
-            print(f"No files found for {name}")
-########################################################
-
-                ### ORIGINAL CODE ###
-        #     for file in files:
-        #         logging.debug(f"Matched {name} with {file}")
-        #         match_dict[file].append(
-        #             {
-        #                 "sample": matched_sample,
-        #                 "pref_id_bool": used_pref_id,
-        #             }
-        #         )
-        #         reads_ops.append(
-        #             pymongo.operations.UpdateOne(
-        #                 filter={"file_name": file},
-        #                 update={
-        #                     "$set": {"orphan": False},
-        #                 },
-        #             )
-        #         )
-        #     # print(files)
-        #     metadata_ops.append(
-        #         pymongo.operations.UpdateOne(
-        #             filter={"*sample_name": name},
-        #             update={
-        #                 "$set": {
-        #                     "files": files,
-        #                     "recieved": dates,
-        #                     "filesize_sum": filesize_sum,
-        #                 },
-        #             },
-        #         )
-        #     )
-        # else:
-        #     print("got here")
-        #     files=[]
-        #     dates=np.nan
-        #     filesize_sum=0
-        #     metadata_ops.append(
-        #         pymongo.operations.UpdateOne(
-        #             filter={"*sample_name": name},
-        #             update={
-        #                 "$set": {
-        #                     "files": files,
-        #                     "recieved": dates,
-        #                     "filesize_sum": filesize_sum,
-        #                 },
-        #             },
-        #         )
-        #     )
-            
-        #     logging.warning(f"No files found for {name}")
-            # continue
+            log_file.write(f"No files found for {name}\n")
+            log_file.write('\n')
 
     for k, v in match_dict.items():
 
@@ -345,11 +309,15 @@ def link_files_to_metadata(db_client: pymongo.MongoClient):
             logging.warning(
                 f" File: '{k}' has multiple samples associated with it: {matched_samples}"
             )
+            log_file.write(f" File: '{k}' has multiple samples associated with it: {matched_samples}.\n")
+            #log_file.write('\n')
             best_match = solve_conflict(k, v)
             matches_to_drop = [i for i in matched_samples if i != best_match]
             logging.warning(
                 f" Pulling file: '{k}' from samples: {matches_to_drop} because '{best_match}' matched the file best."
             )
+            log_file.write(f" Pulling file: '{k}' from samples: {matches_to_drop} because '{best_match}' matched the file best.\n")
+            #log_file.write('\n')
             for match in matches_to_drop:
                 metadata_ops.append(
                     pymongo.operations.UpdateOne(
@@ -362,22 +330,41 @@ def link_files_to_metadata(db_client: pymongo.MongoClient):
     #     logging.info(" Found no matches, exiting.")
     #     return
     logging.info(f" Matched {matched_files} orphan files with {matches} samples")
+    log_file.write(f" Matched {matched_files} orphan files with {matches} samples.\n")
+    log_file.write('\n')
     # print("got here too", metadata_ops)
     if metadata_ops:
         try:
             metadata.bulk_write(metadata_ops)
             reads_db.bulk_write(reads_ops)
-            print('test')
+            log_file.write('Update Reads Complete!')
+            log_file.close()
         except BulkWriteError as bwe:
             logging.error(bwe.details)
+            log_file.close()
 
 
 def main():
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--lane-name", type=str, help="Specify the QB3/CAT Lane name for updates")
+    args = parser.parse_args()
+    #lane_names = args.lane_name.split(',')
+
     files = list_s3_bucket_objs()
     db_client = get_mongo_client()
     update_db_all(db_client, files)
-    link_files_to_metadata(db_client)
+    # if args.lane_name and len(lane_names) == 1:
+    if args.lane_name:
+        link_files_to_metadata(db_client, args.lane_name)
 
+    # elif args.lane_name and len(lane_names) >= 2:
+    #     for lane_name in lane_names:
+    #         link_files_to_metadata(db_client, lane_name)
+    
+    else:
+        print("Please specify a QB3/UCSF Lane Name using the '--lane-name' argument.")
+    
 
 if __name__ == "__main__":
     main()
